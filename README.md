@@ -137,12 +137,30 @@ Never commit real credentials. Use `.env.example` as the only tracked env templa
 
 - `Dependabot` is configured in `.github/dependabot.yml` for npm, pip, and GitHub Actions updates.
 
-## Manual COM Smoke Checklist (Windows)
+## Windows COM Smoke Runner
 
-1. `pptx_open_presentation`
-2. `pptx_get_layouts`
-3. `pptx_add_slide` by exact layout name
-4. `pptx_set_placeholder_text` and `pptx_clear_placeholder`
-5. `pptx_reorder_slides` and `pptx_delete_slide`
-6. `pptx_get_slide_snapshot`
-7. `pptx_save_presentation`
+Run this on a licensed Windows machine with PowerPoint installed to validate COM parity quickly.
+
+PowerShell wrapper:
+
+```powershell
+.\scripts\run_windows_com_smoke.ps1
+```
+
+Python direct invocation:
+
+```bash
+PYTHONPATH=python python scripts/windows_com_smoke.py --output-dir /abs/path/to/artifacts/com-smoke
+```
+
+Useful options:
+- `--input-pptx <absolute_path>`: run smoke checks against an existing deck
+- `--layout-name \"Title Slide\"`: force a specific layout for add-slide
+- `--skip-snapshot`: skip image snapshot validation
+- `--allow-ooxml`: debug script flow on non-Windows hosts (not a COM parity check)
+
+Outputs are written to `artifacts/com-smoke/` by default:
+- `com_smoke_output_<timestamp>.pptx`
+- `com_smoke_snapshot_<timestamp>.jpg` (unless skipped)
+- `com_smoke_report_<timestamp>.json`
+- `com_smoke_report_<timestamp>.md` (automated status + manual checklist)

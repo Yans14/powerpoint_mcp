@@ -21,6 +21,12 @@ npm run test:py
 pre-commit run --all-files
 ```
 
+Windows COM parity smoke run:
+
+```powershell
+.\scripts\run_windows_com_smoke.ps1
+```
+
 ## Commit hygiene
 
 - Keep commits focused and small.
