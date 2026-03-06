@@ -1,0 +1,7 @@
+python-pptx>=1.0.2
+pywin32>=306; platform_system == "Windows"
+pillow>=10.0.0
+pydantic>=2.7.0
+lxml>=5.2.0
+defusedxml>=0.7.1
+fastapi>=0.110.0

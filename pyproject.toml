@@ -1,0 +1,21 @@
+[tool.black]
+line-length = 120
+target-version = ["py311", "py312"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+src = ["python"]
+extend-exclude = ["dist", "node_modules"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["E501", "SIM105"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["python"]
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-q"
+testpaths = ["python/tests"]

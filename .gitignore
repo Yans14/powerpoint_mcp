@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.pytest_cache/
+__pycache__/
+*.pyc
+*.pptx~
+*.tmp
+*.log
+.env
+.env.*
+!.env.example
+.vscode/
+.DS_Store
+.venv/
+.ruff_cache/
+.coverage
+coverage.xml

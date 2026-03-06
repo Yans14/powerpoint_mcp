@@ -1,0 +1,12 @@
+title = "powerpoint_mcp gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allow known non-secret test fixtures and generated assets"
+paths = [
+  '''tests/golden/''',
+  '''node_modules/''',
+  '''dist/'''
+]
