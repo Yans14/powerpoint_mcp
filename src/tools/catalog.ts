@@ -38,7 +38,7 @@ const colorHexSchema = z
 export interface ToolDefinition {
   name: string;
   description: string;
-  schema: z.AnyZodObject;
+  schema: z.ZodTypeAny;
   mutating: boolean;
 }
 

@@ -28,7 +28,7 @@ export function createMcpServer(bridge: PythonBridgeClient): Server {
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
       tools: TOOL_DEFINITIONS.map((definition) => {
-        const schema = zodToJsonSchema(definition.schema, {
+        const schema = zodToJsonSchema(definition.schema as never, {
           $refStrategy: "none",
           target: "jsonSchema7",
         }) as Record<string, unknown>;
@@ -85,7 +85,7 @@ export function createMcpServer(bridge: PythonBridgeClient): Server {
     }
 
     try {
-      const result = await bridge.call(toolName, parseResult.data);
+      const result = await bridge.call(toolName, parseResult.data as Record<string, unknown>);
       const content: Array<Record<string, unknown>> = [
         {
           type: "text",

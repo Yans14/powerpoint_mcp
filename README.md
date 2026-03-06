@@ -33,12 +33,26 @@ python3 -m pip install -r requirements.txt -r requirements-dev.txt
 pre-commit install --install-hooks
 ```
 
+You can do the same with:
+
+```bash
+make install
+make precommit-install
+```
+
 ## Run
 
 ```bash
 npm run dev
 # or
 npm run build && npm start
+```
+
+Make shortcuts:
+
+```bash
+make mcp
+make mcp-start
 ```
 
 ## Architecture
@@ -101,6 +115,17 @@ npm test
 npm run test:py
 ```
 
+## Notebook-based Validation (Windows)
+
+Windows-focused Jupyter notebooks are available in `notebooks/` for Phase 1/2 validation:
+
+1. `notebooks/01_engine_session_smoke.ipynb`
+2. `notebooks/02_discovery_and_slide_management.ipynb`
+3. `notebooks/03_placeholders_background.ipynb`
+4. `notebooks/04_snapshot_and_reports.ipynb`
+
+See `notebooks/README.md` for run guidance and expected outputs.
+
 ## Quality and formatting
 
 ```bash
@@ -113,6 +138,15 @@ npm run check
 
 # Run all pre-commit hooks manually
 npm run precommit:run
+```
+
+Equivalent make targets:
+
+```bash
+make check
+make lint-py
+make format-check-py
+make precommit-run
 ```
 
 Python tool configuration is centralized in `pyproject.toml`:
@@ -151,6 +185,13 @@ Python direct invocation:
 
 ```bash
 PYTHONPATH=python python scripts/windows_com_smoke.py --output-dir /abs/path/to/artifacts/com-smoke
+```
+
+Make shortcuts:
+
+```bash
+make com-smoke
+make com-smoke-ooxml
 ```
 
 Useful options:
