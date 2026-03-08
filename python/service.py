@@ -10,7 +10,9 @@ from errors import BridgeError
 from handlers.discovery import DISCOVERY_METHODS
 from handlers.placeholders import PLACEHOLDER_METHODS
 from handlers.session import SESSION_METHODS
+from handlers.shapes import SHAPE_METHODS
 from handlers.slides import SLIDE_METHODS
+from handlers.tables import TABLE_METHODS
 
 
 class PowerPointService:
@@ -35,6 +37,8 @@ class PowerPointService:
             **DISCOVERY_METHODS,
             **SLIDE_METHODS,
             **PLACEHOLDER_METHODS,
+            **SHAPE_METHODS,
+            **TABLE_METHODS,
         }
 
     def dispatch(self, method: str, params: dict[str, Any]) -> Any:

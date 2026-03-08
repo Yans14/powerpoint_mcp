@@ -770,6 +770,82 @@ class COMEngine(BaseEngine):
             ],
         }
 
+    # ------------------------------------------------------------------ #
+    # Phase 3 stubs – COM implementation pending
+    # ------------------------------------------------------------------ #
+
+    def _com_stub(self, method_name: str, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        raise BridgeError(
+            code="engine_error",
+            message=f"COM engine does not yet implement '{method_name}'. Use OOXML mode.",
+            details={"method": method_name},
+        )
+
+    def set_placeholder_rich_text(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("set_placeholder_rich_text", params)
+
+    def add_text_box(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("add_text_box", params)
+
+    def get_slide_text(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("get_slide_text", params)
+
+    def get_shape_details(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("get_shape_details", params)
+
+    def add_table(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("add_table", params)
+
+    def get_table(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("get_table", params)
+
+    def set_table_cell(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("set_table_cell", params)
+
+    def set_table_data(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("set_table_data", params)
+
+    def add_shape(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("add_shape", params)
+
+    def delete_shape(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("delete_shape", params)
+
+    def set_slide_notes(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("set_slide_notes", params)
+
+    def set_shape_text(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("set_shape_text", params)
+
+    def get_slide_xml(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("get_slide_xml", params)
+
+    # --- Phase 4 stubs ---
+
+    def set_shape_properties(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("set_shape_properties", params)
+
+    def clone_shape(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("clone_shape", params)
+
+    def group_shapes(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("group_shapes", params)
+
+    def ungroup_shapes(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("ungroup_shapes", params)
+
+    def set_shape_z_order(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("set_shape_z_order", params)
+
+    def add_image(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("add_image", params)
+
+    def add_line(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("add_line", params)
+
+    def find_replace_text(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("find_replace_text", params)
+
     def shutdown(self) -> None:  # pragma: no cover - Windows only
         for session_id in list(self.sessions.keys()):
             try:

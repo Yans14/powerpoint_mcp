@@ -8,7 +8,7 @@ describe("tool catalog", () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it("contains all required phase 1-2 tools", () => {
+  it("contains all required phase 1-3 tools", () => {
     const names = new Set(TOOL_DEFINITIONS.map((definition) => definition.name));
     [
       "pptx_get_engine_info",
@@ -35,6 +35,31 @@ describe("tool catalog", () => {
       "pptx_set_placeholder_image",
       "pptx_clear_placeholder",
       "pptx_get_placeholder_text",
+      // Phase 3A
+      "pptx_set_placeholder_rich_text",
+      "pptx_add_text_box",
+      "pptx_get_slide_text",
+      "pptx_get_shape_details",
+      // Phase 3B
+      "pptx_add_table",
+      "pptx_get_table",
+      "pptx_set_table_cell",
+      "pptx_set_table_data",
+      // Phase 3C
+      "pptx_add_shape",
+      "pptx_delete_shape",
+      "pptx_set_slide_notes",
+      "pptx_set_shape_text",
+      "pptx_get_slide_xml",
+      // Phase 4
+      "pptx_set_shape_properties",
+      "pptx_clone_shape",
+      "pptx_group_shapes",
+      "pptx_ungroup_shapes",
+      "pptx_set_shape_z_order",
+      "pptx_add_image",
+      "pptx_add_line",
+      "pptx_find_replace_text",
     ].forEach((tool) => expect(names.has(tool)).toBe(true));
   });
 });

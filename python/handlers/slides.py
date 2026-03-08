@@ -7,4 +7,8 @@ SLIDE_METHODS = {
     "pptx_move_slide": "move_slide",
     "pptx_set_slide_background": "set_slide_background",
     "pptx_get_slide_snapshot": "get_slide_snapshot",
+    "pptx_get_slide_text": "get_slide_text",
+    "pptx_get_slide_xml": "get_slide_xml",
+    "pptx_set_slide_notes": "set_slide_notes",
+    "pptx_find_replace_text": "find_replace_text",
 }
