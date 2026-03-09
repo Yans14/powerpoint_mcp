@@ -55,6 +55,34 @@ make mcp
 make mcp-start
 ```
 
+## Web UI (Local Test Console)
+
+The repo includes a lightweight FastAPI + static HTML UI for interactive testing of tools, sessions, and logs.
+
+Run it from the project root:
+
+```bash
+python3 -m uvicorn web_ui:app --app-dir python --host 127.0.0.1 --port 8000 --reload
+```
+
+Then open:
+
+- `http://127.0.0.1:8000`
+
+What it exposes:
+
+- Tool catalog browser grouped by category (`GET /api/tools`)
+- Engine info (`GET /api/engine`)
+- Open sessions list (`GET /api/sessions`)
+- Generic method dispatcher (`POST /api/dispatch`)
+- Live backend logs over WebSocket (`/ws/logs`)
+
+Relevant files:
+
+- `python/web_ui.py` (FastAPI app + API routes + WebSocket log broadcast)
+- `python/tool_catalog.py` (UI-facing tool metadata/catalog shaping)
+- `web/index.html` (single-page test UI)
+
 ## Architecture
 
 - `src/index.ts`: MCP stdio entrypoint
