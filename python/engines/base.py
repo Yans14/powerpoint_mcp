@@ -209,6 +209,60 @@ class BaseEngine(ABC):
     def find_replace_text(self, params: dict[str, Any]) -> dict[str, Any]:
         raise NotImplementedError
 
+    # --- Phase 5: Chart tools ---
+
+    @abstractmethod
+    def add_chart(self, params: dict[str, Any]) -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_chart_data(self, params: dict[str, Any]) -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def update_chart_data(self, params: dict[str, Any]) -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def set_chart_style(self, params: dict[str, Any]) -> dict[str, Any]:
+        raise NotImplementedError
+
+    # --- Phase 6: Agent workflow tools ---
+
+    @abstractmethod
+    def copy_shape_between_decks(self, params: dict[str, Any]) -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_slide_shapes(self, params: dict[str, Any]) -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def set_table_cell_merge(self, params: dict[str, Any]) -> dict[str, Any]:
+        raise NotImplementedError
+
+    # --- Phase 7: Formatting & Fidelity tools ---
+
+    @abstractmethod
+    def set_paragraph_spacing(self, params: dict[str, Any]) -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def set_text_box_properties(self, params: dict[str, Any]) -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def set_table_style(self, params: dict[str, Any]) -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def set_shape_fill_gradient(self, params: dict[str, Any]) -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def add_connector(self, params: dict[str, Any]) -> dict[str, Any]:
+        raise NotImplementedError
+
     @abstractmethod
     def shutdown(self) -> None:
         raise NotImplementedError

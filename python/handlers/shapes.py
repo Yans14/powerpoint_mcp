@@ -11,4 +11,8 @@ SHAPE_METHODS = {
     "pptx_set_shape_z_order": "set_shape_z_order",
     "pptx_add_image": "add_image",
     "pptx_add_line": "add_line",
+    "pptx_copy_shape_between_decks": "copy_shape_between_decks",
+    "pptx_get_slide_shapes": "get_slide_shapes",
+    "pptx_set_text_box_properties": "set_text_box_properties",
+    "pptx_set_shape_fill_gradient": "set_shape_fill_gradient",
 }

@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import uuid
 import zipfile
@@ -15,39 +16,20 @@ from typing import Any
 from lxml import etree
 from pptx import Presentation
 from pptx.dml.color import RGBColor
+from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
 from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE
 from pptx.enum.text import PP_ALIGN
 from pptx.util import Emu, Pt
 
 from engines.base import BaseEngine, EngineSession
 from errors import BridgeError, ensure
+from utils.colors import normalize_color
 from utils.paths import validate_existing_file, validate_output_file
 from utils.units import emu_to_inches, to_emu
 
 _COLOR_NAMESPACES = {
     "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
 }
-
-
-def _normalize_color(color_value: str) -> str:
-    value = color_value.strip()
-    if value.startswith("#"):
-        value = value[1:]
-    if len(value) != 6:
-        raise BridgeError(
-            code="validation_error",
-            message="Color must be 6 hex characters.",
-            details={"color": color_value},
-        )
-    try:
-        int(value, 16)
-    except ValueError as exc:
-        raise BridgeError(
-            code="validation_error",
-            message="Color must be valid hex.",
-            details={"color": color_value},
-        ) from exc
-    return value.upper()
 
 
 class OOXMLEngine(BaseEngine):
@@ -462,7 +444,7 @@ class OOXMLEngine(BaseEngine):
         if color_hex:
             fill = slide.background.fill
             fill.solid()
-            fill.fore_color.rgb = RGBColor.from_string(_normalize_color(str(color_hex)))
+            fill.fore_color.rgb = RGBColor.from_string(normalize_color(str(color_hex)))
 
         if image_path:
             image = validate_existing_file(str(image_path), expected_suffixes=(".png", ".jpg", ".jpeg", ".bmp", ".gif"))
@@ -477,8 +459,8 @@ class OOXMLEngine(BaseEngine):
             try:
                 fill.gradient()
                 grad_stops = fill.gradient_stops
-                grad_stops[0].color.rgb = RGBColor.from_string(_normalize_color(str(grad_start)))
-                grad_stops[-1].color.rgb = RGBColor.from_string(_normalize_color(str(grad_end)))
+                grad_stops[0].color.rgb = RGBColor.from_string(normalize_color(str(grad_start)))
+                grad_stops[-1].color.rgb = RGBColor.from_string(normalize_color(str(grad_end)))
             except Exception:
                 warnings.append("Gradient background is partially supported in OOXML mode.")
 
@@ -620,13 +602,8 @@ class OOXMLEngine(BaseEngine):
         paragraph.text = str(params.get("text_content", ""))
 
         alignment = params.get("alignment")
-        if alignment:
-            paragraph.alignment = {
-                "left": PP_ALIGN.LEFT,
-                "center": PP_ALIGN.CENTER,
-                "right": PP_ALIGN.RIGHT,
-                "justify": PP_ALIGN.JUSTIFY,
-            }[str(alignment)]
+        if alignment and alignment in self._ALIGN_MAP:
+            paragraph.alignment = self._ALIGN_MAP[alignment]
 
         if paragraph.runs:
             run = paragraph.runs[0]
@@ -641,7 +618,7 @@ class OOXMLEngine(BaseEngine):
             if params.get("underline") is not None:
                 run.font.underline = bool(params["underline"])
             if params.get("color_hex"):
-                run.font.color.rgb = RGBColor.from_string(_normalize_color(str(params["color_hex"])))
+                run.font.color.rgb = RGBColor.from_string(normalize_color(str(params["color_hex"])))
 
         self._persist(session)
 
@@ -759,6 +736,8 @@ class OOXMLEngine(BaseEngine):
         "justify": PP_ALIGN.JUSTIFY,
     }
 
+    _REVERSE_ALIGN_MAP = {v: k for k, v in _ALIGN_MAP.items()}
+
     def set_placeholder_rich_text(self, params: dict[str, Any]) -> dict[str, Any]:
         session = self._get_session(str(params["presentation_id"]))
         slide_index = int(params["slide_index"])
@@ -770,31 +749,7 @@ class OOXMLEngine(BaseEngine):
         paragraphs_data = params.get("paragraphs", [])
         ensure(len(paragraphs_data) > 0, "validation_error", "At least one paragraph is required.")
 
-        text_frame = placeholder.text_frame
-        text_frame.clear()
-
-        for p_idx, p_data in enumerate(paragraphs_data):
-            paragraph = text_frame.paragraphs[0] if p_idx == 0 else text_frame.add_paragraph()
-
-            alignment = p_data.get("alignment")
-            if alignment and alignment in self._ALIGN_MAP:
-                paragraph.alignment = self._ALIGN_MAP[alignment]
-
-            level = p_data.get("level")
-            if level is not None:
-                paragraph.level = int(level)
-
-            runs_data = p_data.get("runs", [])
-            if not runs_data:
-                # Allow plain-text paragraph shorthand
-                text = p_data.get("text", "")
-                run = paragraph.add_run()
-                run.text = str(text)
-            else:
-                for r_data in runs_data:
-                    run = paragraph.add_run()
-                    run.text = str(r_data.get("text", ""))
-                    self._apply_run_formatting(run, r_data)
+        self._write_paragraphs(placeholder.text_frame, paragraphs_data)
 
         self._persist(session)
 
@@ -825,23 +780,7 @@ class OOXMLEngine(BaseEngine):
         # Support rich paragraphs or simple text_content
         paragraphs_data = params.get("paragraphs")
         if paragraphs_data:
-            text_frame.clear()
-            for p_idx, p_data in enumerate(paragraphs_data):
-                paragraph = text_frame.paragraphs[0] if p_idx == 0 else text_frame.add_paragraph()
-
-                alignment = p_data.get("alignment")
-                if alignment and alignment in self._ALIGN_MAP:
-                    paragraph.alignment = self._ALIGN_MAP[alignment]
-
-                runs_data = p_data.get("runs", [])
-                if not runs_data:
-                    run = paragraph.add_run()
-                    run.text = str(p_data.get("text", ""))
-                else:
-                    for r_data in runs_data:
-                        run = paragraph.add_run()
-                        run.text = str(r_data.get("text", ""))
-                        self._apply_run_formatting(run, r_data)
+            self._write_paragraphs(text_frame, paragraphs_data)
         else:
             text_content = str(params.get("text_content", ""))
             paragraph = text_frame.paragraphs[0]
@@ -887,10 +826,7 @@ class OOXMLEngine(BaseEngine):
         slide_index = int(params["slide_index"])
         slide = self._get_slide_obj(session, slide_index)
 
-        shape_identifier = params.get("shape_name") or params.get("shape_id")
-        ensure(shape_identifier is not None, "validation_error", "shape_name or shape_id is required.")
-
-        shape = self._find_shape(slide, shape_identifier)
+        shape = self._require_shape(slide, params)
         detail = self._detailed_shape_payload(shape)
 
         return {
@@ -1091,12 +1027,12 @@ class OOXMLEngine(BaseEngine):
         fill_hex = params.get("fill_hex")
         if fill_hex:
             shape.fill.solid()
-            shape.fill.fore_color.rgb = RGBColor.from_string(_normalize_color(str(fill_hex)))
+            shape.fill.fore_color.rgb = RGBColor.from_string(normalize_color(str(fill_hex)))
 
         # Optional line color
         line_hex = params.get("line_hex")
         if line_hex:
-            shape.line.color.rgb = RGBColor.from_string(_normalize_color(str(line_hex)))
+            shape.line.color.rgb = RGBColor.from_string(normalize_color(str(line_hex)))
 
         # Optional text
         text = params.get("text")
@@ -1119,10 +1055,8 @@ class OOXMLEngine(BaseEngine):
         slide_index = int(params["slide_index"])
         slide = self._get_slide_obj(session, slide_index)
 
-        shape_identifier = params.get("shape_name") or params.get("shape_id")
-        ensure(shape_identifier is not None, "validation_error", "shape_name or shape_id is required.")
-
-        shape = self._find_shape(slide, shape_identifier)
+        shape = self._require_shape(slide, params)
+        deleted_shape = shape.name if shape.name else str(shape.shape_id)
         # Remove the shape element from the shape tree
         sp_tree = slide.shapes._spTree
         sp_tree.remove(shape.element)
@@ -1133,7 +1067,7 @@ class OOXMLEngine(BaseEngine):
             "success": True,
             "presentation_id": session.id,
             "slide_index": slide_index,
-            "deleted_shape": str(shape_identifier),
+            "deleted_shape": deleted_shape,
             "presentation_state": self.get_presentation_state({"presentation_id": session.id}),
         }
 
@@ -1161,10 +1095,7 @@ class OOXMLEngine(BaseEngine):
         slide_index = int(params["slide_index"])
         slide = self._get_slide_obj(session, slide_index)
 
-        shape_identifier = params.get("shape_name") or params.get("shape_id")
-        ensure(shape_identifier is not None, "validation_error", "shape_name or shape_id is required.")
-
-        shape = self._find_shape(slide, shape_identifier)
+        shape = self._require_shape(slide, params)
         ensure(
             hasattr(shape, "has_text_frame") and shape.has_text_frame,
             "conflict",
@@ -1175,27 +1106,7 @@ class OOXMLEngine(BaseEngine):
         paragraphs_data = params.get("paragraphs")
 
         if paragraphs_data:
-            text_frame.clear()
-            for p_idx, p_data in enumerate(paragraphs_data):
-                paragraph = text_frame.paragraphs[0] if p_idx == 0 else text_frame.add_paragraph()
-
-                alignment = p_data.get("alignment")
-                if alignment and alignment in self._ALIGN_MAP:
-                    paragraph.alignment = self._ALIGN_MAP[alignment]
-
-                level = p_data.get("level")
-                if level is not None:
-                    paragraph.level = int(level)
-
-                runs_data = p_data.get("runs", [])
-                if not runs_data:
-                    run = paragraph.add_run()
-                    run.text = str(p_data.get("text", ""))
-                else:
-                    for r_data in runs_data:
-                        run = paragraph.add_run()
-                        run.text = str(r_data.get("text", ""))
-                        self._apply_run_formatting(run, r_data)
+            self._write_paragraphs(text_frame, paragraphs_data)
         else:
             text_content = str(params.get("text_content", ""))
             text_frame.paragraphs[0].text = text_content
@@ -1232,9 +1143,7 @@ class OOXMLEngine(BaseEngine):
         slide_index = int(params["slide_index"])
         slide = self._get_slide_obj(session, slide_index)
 
-        shape_identifier = params.get("shape_name") or params.get("shape_id")
-        ensure(shape_identifier is not None, "validation_error", "shape_name or shape_id is required.")
-        shape = self._find_shape(slide, shape_identifier)
+        shape = self._require_shape(slide, params)
 
         # Position / size
         if "left" in params:
@@ -1256,14 +1165,14 @@ class OOXMLEngine(BaseEngine):
             shape.fill.background()
         elif fill_hex:
             shape.fill.solid()
-            shape.fill.fore_color.rgb = RGBColor.from_string(_normalize_color(str(fill_hex)))
+            shape.fill.fore_color.rgb = RGBColor.from_string(normalize_color(str(fill_hex)))
 
         # Line / outline
         line_hex = params.get("line_hex")
         if line_hex == "none":
             shape.line.fill.background()
         elif line_hex:
-            shape.line.color.rgb = RGBColor.from_string(_normalize_color(str(line_hex)))
+            shape.line.color.rgb = RGBColor.from_string(normalize_color(str(line_hex)))
 
         line_width_pt = params.get("line_width_pt")
         if line_width_pt is not None:
@@ -1293,9 +1202,7 @@ class OOXMLEngine(BaseEngine):
         slide_index = int(params["slide_index"])
         slide = self._get_slide_obj(session, slide_index)
 
-        shape_identifier = params.get("shape_name") or params.get("shape_id")
-        ensure(shape_identifier is not None, "validation_error", "shape_name or shape_id is required.")
-        shape = self._find_shape(slide, shape_identifier)
+        shape = self._require_shape(slide, params)
 
         # Target slide (default: same slide)
         target_slide_index = int(params.get("target_slide_index", slide_index))
@@ -1381,9 +1288,10 @@ class OOXMLEngine(BaseEngine):
         )
 
         # Non-visual group shape properties
+        next_id = max((int(s.shape_id) for s in slide.shapes), default=0) + 1
         nvGrpSpPr = etree.SubElement(grp_sp, "{http://schemas.openxmlformats.org/presentationml/2006/main}nvGrpSpPr")
         cNvPr = etree.SubElement(nvGrpSpPr, "{http://schemas.openxmlformats.org/presentationml/2006/main}cNvPr")
-        cNvPr.set("id", "0")
+        cNvPr.set("id", str(next_id))
         cNvPr.set("name", str(params.get("group_name", "Group")))
         etree.SubElement(nvGrpSpPr, "{http://schemas.openxmlformats.org/presentationml/2006/main}cNvGrpSpPr")
         etree.SubElement(nvGrpSpPr, "{http://schemas.openxmlformats.org/presentationml/2006/main}nvPr")
@@ -1409,9 +1317,7 @@ class OOXMLEngine(BaseEngine):
         slide_index = int(params["slide_index"])
         slide = self._get_slide_obj(session, slide_index)
 
-        shape_identifier = params.get("shape_name") or params.get("shape_id")
-        ensure(shape_identifier is not None, "validation_error", "shape_name or shape_id is required.")
-        shape = self._find_shape(slide, shape_identifier)
+        shape = self._require_shape(slide, params)
 
         ensure(
             shape.shape_type == MSO_SHAPE_TYPE.GROUP,
@@ -1465,9 +1371,7 @@ class OOXMLEngine(BaseEngine):
         slide_index = int(params["slide_index"])
         slide = self._get_slide_obj(session, slide_index)
 
-        shape_identifier = params.get("shape_name") or params.get("shape_id")
-        ensure(shape_identifier is not None, "validation_error", "shape_name or shape_id is required.")
-        shape = self._find_shape(slide, shape_identifier)
+        shape = self._require_shape(slide, params)
 
         action = str(params.get("action", "front")).lower()
         ensure(
@@ -1575,10 +1479,11 @@ class OOXMLEngine(BaseEngine):
         # Build connector shape XML
         cxn_sp = etree.SubElement(sp_tree, qn("p:cxnSp"))
 
-        # Non-visual properties
+        # Non-visual properties — generate a unique shape ID
+        next_id = max((int(s.shape_id) for s in slide.shapes), default=0) + 1
         nv = etree.SubElement(cxn_sp, qn("p:nvCxnSpPr"))
         cNvPr = etree.SubElement(nv, qn("p:cNvPr"))
-        cNvPr.set("id", "0")
+        cNvPr.set("id", str(next_id))
         cNvPr.set("name", str(params.get("line_name", "Connector")))
         etree.SubElement(nv, qn("p:cNvCxnSpPr"))
         etree.SubElement(nv, qn("p:nvPr"))
@@ -1604,7 +1509,7 @@ class OOXMLEngine(BaseEngine):
         ln = etree.SubElement(sp_pr, qn("a:ln"), attrib={"w": str(int(Pt(float(line_width_pt))))})
         if line_hex:
             solid = etree.SubElement(ln, qn("a:solidFill"))
-            etree.SubElement(solid, qn("a:srgbClr"), attrib={"val": _normalize_color(str(line_hex))})
+            etree.SubElement(solid, qn("a:srgbClr"), attrib={"val": normalize_color(str(line_hex))})
         else:
             solid = etree.SubElement(ln, qn("a:solidFill"))
             etree.SubElement(solid, qn("a:srgbClr"), attrib={"val": "000000"})
@@ -1655,6 +1560,760 @@ class OOXMLEngine(BaseEngine):
             "replace_text": replace_text,
             "total_replacements": total_replacements,
             "slides_searched": len(slides),
+            "presentation_state": self.get_presentation_state({"presentation_id": session.id}),
+        }
+
+    # ------------------------------------------------------------------ #
+    # Phase 5 — Chart tools
+    # ------------------------------------------------------------------ #
+
+    _CHART_TYPE_MAP = {
+        "column_clustered": XL_CHART_TYPE.COLUMN_CLUSTERED,
+        "column_stacked": XL_CHART_TYPE.COLUMN_STACKED,
+        "column_stacked_100": XL_CHART_TYPE.COLUMN_STACKED_100,
+        "bar_clustered": XL_CHART_TYPE.BAR_CLUSTERED,
+        "bar_stacked": XL_CHART_TYPE.BAR_STACKED,
+        "bar_stacked_100": XL_CHART_TYPE.BAR_STACKED_100,
+        "line": XL_CHART_TYPE.LINE,
+        "line_markers": XL_CHART_TYPE.LINE_MARKERS,
+        "line_stacked": XL_CHART_TYPE.LINE_STACKED,
+        "pie": XL_CHART_TYPE.PIE,
+        "pie_exploded": XL_CHART_TYPE.PIE_EXPLODED,
+        "doughnut": XL_CHART_TYPE.DOUGHNUT,
+        "area": XL_CHART_TYPE.AREA,
+        "area_stacked": XL_CHART_TYPE.AREA_STACKED,
+        "area_stacked_100": XL_CHART_TYPE.AREA_STACKED_100,
+        "xy_scatter": XL_CHART_TYPE.XY_SCATTER,
+        "xy_scatter_lines": XL_CHART_TYPE.XY_SCATTER_LINES,
+        "xy_scatter_smooth": XL_CHART_TYPE.XY_SCATTER_SMOOTH,
+        "bubble": XL_CHART_TYPE.BUBBLE,
+        "radar": XL_CHART_TYPE.RADAR,
+        "stock_hlc": XL_CHART_TYPE.STOCK_HLC,
+        "stock_ohlc": XL_CHART_TYPE.STOCK_OHLC,
+        "three_d_column": XL_CHART_TYPE.THREE_D_COLUMN,
+        "three_d_bar_clustered": XL_CHART_TYPE.THREE_D_BAR_CLUSTERED,
+        "three_d_pie": XL_CHART_TYPE.THREE_D_PIE,
+        "three_d_line": XL_CHART_TYPE.THREE_D_LINE,
+    }
+
+    _LEGEND_POSITION_MAP = {
+        "bottom": XL_LEGEND_POSITION.BOTTOM,
+        "corner": XL_LEGEND_POSITION.CORNER,
+        "left": XL_LEGEND_POSITION.LEFT,
+        "right": XL_LEGEND_POSITION.RIGHT,
+        "top": XL_LEGEND_POSITION.TOP,
+    }
+
+    def add_chart(self, params: dict[str, Any]) -> dict[str, Any]:
+        from pptx.chart.data import BubbleChartData, CategoryChartData, XyChartData
+
+        session = self._get_session(str(params["presentation_id"]))
+        slide_index = int(params["slide_index"])
+        slide = self._get_slide_obj(session, slide_index)
+
+        chart_type_str = str(params["chart_type"]).lower()
+        xl_type = self._CHART_TYPE_MAP.get(chart_type_str)
+        ensure(
+            xl_type is not None,
+            "validation_error",
+            f"Unknown chart_type '{chart_type_str}'.",
+            {"available": sorted(self._CHART_TYPE_MAP.keys())},
+        )
+
+        left = to_emu(params.get("left", "1in"))
+        top = to_emu(params.get("top", "1in"))
+        width = to_emu(params.get("width", "8in"))
+        height = to_emu(params.get("height", "5in"))
+
+        series_data = params.get("series", [])
+        ensure(len(series_data) > 0, "validation_error", "At least one series is required.")
+
+        # Determine data class based on chart type
+        is_xy = chart_type_str.startswith("xy_scatter")
+        is_bubble = chart_type_str.startswith("bubble")
+
+        if is_xy:
+            chart_data = XyChartData()
+            for s in series_data:
+                series_obj = chart_data.add_series(str(s.get("name", "Series")))
+                data_points = s.get("data_points", [])
+                for dp in data_points:
+                    series_obj.add_data_point(float(dp["x"]), float(dp["y"]))
+        elif is_bubble:
+            chart_data = BubbleChartData()
+            for s in series_data:
+                series_obj = chart_data.add_series(str(s.get("name", "Series")))
+                data_points = s.get("data_points", [])
+                for dp in data_points:
+                    series_obj.add_data_point(float(dp["x"]), float(dp["y"]), float(dp.get("size", 10)))
+        else:
+            chart_data = CategoryChartData()
+            categories = params.get("categories", [])
+            if categories:
+                chart_data.categories = categories
+            for s in series_data:
+                chart_data.add_series(str(s.get("name", "Series")), s.get("values", []))
+
+        graphic_frame = slide.shapes.add_chart(xl_type, Emu(left), Emu(top), Emu(width), Emu(height), chart_data)
+        chart = graphic_frame.chart
+
+        # Optional styling
+        if params.get("has_legend") is not None:
+            chart.has_legend = bool(params["has_legend"])
+
+        if chart.has_legend and params.get("legend_position"):
+            pos = self._LEGEND_POSITION_MAP.get(str(params["legend_position"]).lower())
+            if pos is not None:
+                chart.legend.position = pos
+                chart.legend.include_in_layout = False
+
+        if params.get("has_data_labels"):
+            plot = chart.plots[0]
+            plot.has_data_labels = True
+            fmt = params.get("data_label_number_format")
+            if fmt:
+                plot.data_labels.number_format = str(fmt)
+
+        if params.get("chart_style") is not None:
+            chart.style = int(params["chart_style"])
+
+        if params.get("title"):
+            chart.has_title = True
+            chart.chart_title.text_frame.text = str(params["title"])
+
+        self._persist(session)
+
+        return {
+            "success": True,
+            "presentation_id": session.id,
+            "slide_index": slide_index,
+            "shape_name": graphic_frame.name,
+            "shape_id": int(graphic_frame.shape_id),
+            "chart_type": chart_type_str,
+            "presentation_state": self.get_presentation_state({"presentation_id": session.id}),
+        }
+
+    def get_chart_data(self, params: dict[str, Any]) -> dict[str, Any]:
+        session = self._get_session(str(params["presentation_id"]))
+        slide_index = int(params["slide_index"])
+        slide = self._get_slide_obj(session, slide_index)
+
+        shape = self._require_shape(slide, params)
+
+        ensure(shape.has_chart, "conflict", "Shape does not contain a chart.")
+        chart = shape.chart
+
+        # Determine chart type name
+        chart_type_name = "unknown"
+        for name, xl_type in self._CHART_TYPE_MAP.items():
+            if chart.chart_type == xl_type:
+                chart_type_name = name
+                break
+
+        # Extract categories
+        categories: list[str] = []
+        try:
+            plot = chart.plots[0]
+            for cat in plot.categories:
+                categories.append(str(cat) if cat is not None else "")
+        except Exception as exc:
+            print(f"[pptx] Warning: could not extract chart categories: {exc}", file=sys.stderr)
+
+        # Extract series
+        series_list: list[dict[str, Any]] = []
+        try:
+            for series in chart.series:
+                s_data: dict[str, Any] = {"name": str(series.name) if hasattr(series, "name") else ""}
+                # Try to get values
+                try:
+                    s_data["values"] = [float(v) if v is not None else None for v in series.values]
+                except Exception as exc:
+                    s_data["values"] = []
+                    print(f"[pptx] Warning: could not extract series values: {exc}", file=sys.stderr)
+                series_list.append(s_data)
+        except Exception as exc:
+            print(f"[pptx] Warning: could not extract chart series: {exc}", file=sys.stderr)
+
+        # Chart properties
+        result: dict[str, Any] = {
+            "presentation_id": session.id,
+            "slide_index": slide_index,
+            "shape_name": shape.name,
+            "chart_type": chart_type_name,
+            "categories": categories,
+            "series": series_list,
+            "has_legend": bool(chart.has_legend),
+            "has_title": bool(chart.has_title),
+        }
+
+        if chart.has_title:
+            try:
+                result["title"] = chart.chart_title.text_frame.text
+            except Exception:
+                result["title"] = ""
+
+        # Data labels
+        try:
+            plot = chart.plots[0]
+            result["has_data_labels"] = bool(plot.has_data_labels)
+            if plot.has_data_labels:
+                result["data_label_number_format"] = str(plot.data_labels.number_format)
+        except Exception:
+            result["has_data_labels"] = False
+
+        return result
+
+    def update_chart_data(self, params: dict[str, Any]) -> dict[str, Any]:
+        from pptx.chart.data import CategoryChartData, XyChartData
+
+        session = self._get_session(str(params["presentation_id"]))
+        slide_index = int(params["slide_index"])
+        slide = self._get_slide_obj(session, slide_index)
+
+        shape = self._require_shape(slide, params)
+
+        ensure(shape.has_chart, "conflict", "Shape does not contain a chart.")
+        chart = shape.chart
+
+        # Determine if XY/scatter type
+        chart_type_name = "unknown"
+        for name, xl_type in self._CHART_TYPE_MAP.items():
+            if chart.chart_type == xl_type:
+                chart_type_name = name
+                break
+
+        is_xy = chart_type_name.startswith("xy_scatter")
+        series_data = params.get("series", [])
+
+        if is_xy:
+            new_data = XyChartData()
+            for s in series_data:
+                series_obj = new_data.add_series(str(s.get("name", "Series")))
+                for dp in s.get("data_points", []):
+                    series_obj.add_data_point(float(dp["x"]), float(dp["y"]))
+        else:
+            new_data = CategoryChartData()
+            categories = params.get("categories")
+            if categories:
+                new_data.categories = categories
+            else:
+                # Keep existing categories
+                try:
+                    existing_cats = [str(c) for c in chart.plots[0].categories]
+                    new_data.categories = existing_cats
+                except Exception:
+                    pass
+
+            for s in series_data:
+                new_data.add_series(str(s.get("name", "Series")), s.get("values", []))
+
+        chart.replace_data(new_data)
+        self._persist(session)
+
+        return {
+            "success": True,
+            "presentation_id": session.id,
+            "slide_index": slide_index,
+            "shape_name": shape.name,
+            "chart_type": chart_type_name,
+            "presentation_state": self.get_presentation_state({"presentation_id": session.id}),
+        }
+
+    def set_chart_style(self, params: dict[str, Any]) -> dict[str, Any]:
+        session = self._get_session(str(params["presentation_id"]))
+        slide_index = int(params["slide_index"])
+        slide = self._get_slide_obj(session, slide_index)
+
+        shape = self._require_shape(slide, params)
+
+        ensure(shape.has_chart, "conflict", "Shape does not contain a chart.")
+        chart = shape.chart
+
+        # Legend
+        if "has_legend" in params:
+            chart.has_legend = bool(params["has_legend"])
+
+        if chart.has_legend and params.get("legend_position"):
+            pos = self._LEGEND_POSITION_MAP.get(str(params["legend_position"]).lower())
+            if pos is not None:
+                chart.legend.position = pos
+                chart.legend.include_in_layout = bool(params.get("legend_in_layout", False))
+
+        # Data labels
+        if "has_data_labels" in params:
+            plot = chart.plots[0]
+            plot.has_data_labels = bool(params["has_data_labels"])
+            if plot.has_data_labels:
+                fmt = params.get("data_label_number_format")
+                if fmt:
+                    plot.data_labels.number_format = str(fmt)
+
+                dl_position = params.get("data_label_position")
+                if dl_position:
+                    from pptx.enum.chart import XL_LABEL_POSITION
+
+                    dl_pos_map = {
+                        "center": XL_LABEL_POSITION.CENTER,
+                        "inside_end": XL_LABEL_POSITION.INSIDE_END,
+                        "outside_end": XL_LABEL_POSITION.OUTSIDE_END,
+                        "inside_base": XL_LABEL_POSITION.INSIDE_BASE,
+                        "above": XL_LABEL_POSITION.ABOVE,
+                        "below": XL_LABEL_POSITION.BELOW,
+                        "left": XL_LABEL_POSITION.LEFT,
+                        "right": XL_LABEL_POSITION.RIGHT,
+                        "best_fit": XL_LABEL_POSITION.BEST_FIT,
+                    }
+                    pos = dl_pos_map.get(str(dl_position).lower())
+                    if pos is not None:
+                        plot.data_labels.position = pos
+
+        # Chart style
+        if "chart_style" in params:
+            chart.style = int(params["chart_style"])
+
+        # Title
+        if "title" in params:
+            title_text = params["title"]
+            if title_text is None or title_text == "":
+                chart.has_title = False
+            else:
+                chart.has_title = True
+                chart.chart_title.text_frame.text = str(title_text)
+
+        self._persist(session)
+
+        return {
+            "success": True,
+            "presentation_id": session.id,
+            "slide_index": slide_index,
+            "shape_name": shape.name,
+            "presentation_state": self.get_presentation_state({"presentation_id": session.id}),
+        }
+
+    # ------------------------------------------------------------------ #
+    # Phase 6 — Agent workflow tools
+    # ------------------------------------------------------------------ #
+
+    def copy_shape_between_decks(self, params: dict[str, Any]) -> dict[str, Any]:
+        source_session = self._get_session(str(params["source_presentation_id"]))
+        target_session = self._get_session(str(params["target_presentation_id"]))
+
+        source_slide_index = int(params["source_slide_index"])
+        target_slide_index = int(params["target_slide_index"])
+
+        source_slide = self._get_slide_obj(source_session, source_slide_index)
+        target_slide = self._get_slide_obj(target_session, target_slide_index)
+
+        source_shape = self._require_shape(source_slide, params)
+
+        # Deep copy the shape XML element
+        new_element = copy.deepcopy(source_shape.element)
+
+        # Handle image relationships: copy image parts from source to target
+        source_slide_part = source_slide.part
+        target_slide_part = target_slide.part
+
+        # Find all relationship references (r:blipFill, r:embed, etc.)
+        nsmap = {
+            "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
+            "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+        }
+        # Transfer blip (image) relationships
+        for blip in new_element.findall(".//a:blip", nsmap):
+            r_embed = blip.get("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed")
+            if r_embed:
+                try:
+                    source_rel = source_slide_part.rels[r_embed]
+                    image_part = source_rel.target_part
+                    # Add the image part to the target slide and get new rId
+                    new_rel = target_slide_part.relate_to(image_part, source_rel.reltype)
+                    blip.set("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed", new_rel)
+                except Exception as exc:
+                    print(f"[pptx] Warning: could not transfer image relationship {r_embed}: {exc}", file=sys.stderr)
+
+        # Apply offset if specified
+        offset_left = params.get("offset_left")
+        offset_top = params.get("offset_top")
+        if offset_left is not None:
+            try:
+                off_elem = new_element.find(".//{http://schemas.openxmlformats.org/drawingml/2006/spreadsheetml}off")
+                if off_elem is None:
+                    # Try presentation ML namespace
+                    for off in new_element.iter():
+                        if off.tag.endswith("}off") or off.tag == "off":
+                            off_elem = off
+                            break
+                if off_elem is not None and off_elem.get("x") is not None:
+                    current_x = int(off_elem.get("x", "0"))
+                    off_elem.set("x", str(current_x + to_emu(offset_left)))
+            except Exception as exc:
+                print(f"[pptx] Warning: could not apply offset_left: {exc}", file=sys.stderr)
+
+        if offset_top is not None:
+            try:
+                for off in new_element.iter():
+                    if (off.tag.endswith("}off") or off.tag == "off") and off.get("y") is not None:
+                        current_y = int(off.get("y", "0"))
+                        off.set("y", str(current_y + to_emu(offset_top)))
+                        break
+            except Exception as exc:
+                print(f"[pptx] Warning: could not apply offset_top: {exc}", file=sys.stderr)
+
+        # Insert into target slide's shape tree
+        target_sp_tree = target_slide.shapes._spTree
+        target_sp_tree.append(new_element)
+
+        self._persist(target_session)
+
+        # Get the new shape's name from the inserted element
+        new_shape_name = ""
+        try:
+            nv_elem = new_element.find(".//{http://schemas.openxmlformats.org/presentationml/2006/main}cNvPr")
+            if nv_elem is None:
+                nv_elem = new_element.find(".//{http://schemas.openxmlformats.org/drawingml/2006/spreadsheetml}cNvPr")
+            if nv_elem is None:
+                # Generic search for cNvPr
+                for elem in new_element.iter():
+                    if elem.tag.endswith("}cNvPr") or elem.tag == "cNvPr":
+                        nv_elem = elem
+                        break
+            if nv_elem is not None:
+                new_shape_name = nv_elem.get("name", "")
+        except Exception:
+            pass
+
+        return {
+            "success": True,
+            "source_presentation_id": source_session.id,
+            "target_presentation_id": target_session.id,
+            "source_slide_index": source_slide_index,
+            "target_slide_index": target_slide_index,
+            "source_shape_name": source_shape.name,
+            "new_shape_name": new_shape_name,
+            "presentation_state": self.get_presentation_state({"presentation_id": target_session.id}),
+        }
+
+    def get_slide_shapes(self, params: dict[str, Any]) -> dict[str, Any]:
+        session = self._get_session(str(params["presentation_id"]))
+        slide_index = int(params["slide_index"])
+        slide = self._get_slide_obj(session, slide_index)
+
+        shapes_list: list[dict[str, Any]] = []
+        for shape in slide.shapes:
+            shape_info: dict[str, Any] = {
+                "shape_id": int(shape.shape_id),
+                "name": shape.name,
+                "shape_type": str(shape.shape_type).split("(")[0].strip() if shape.shape_type else "unknown",
+                "left": emu_to_inches(shape.left) if shape.left is not None else None,
+                "top": emu_to_inches(shape.top) if shape.top is not None else None,
+                "width": emu_to_inches(shape.width) if shape.width is not None else None,
+                "height": emu_to_inches(shape.height) if shape.height is not None else None,
+            }
+
+            # Add key flags
+            shape_info["is_placeholder"] = shape.is_placeholder
+            shape_info["has_text_frame"] = shape.has_text_frame
+            shape_info["has_table"] = shape.has_table
+            shape_info["has_chart"] = shape.has_chart
+
+            if shape.is_placeholder:
+                try:
+                    shape_info["placeholder_name"] = shape.placeholder_format.idx
+                except Exception:
+                    pass
+
+            if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+                shape_info["child_count"] = len(shape.shapes)
+
+            shapes_list.append(shape_info)
+
+        return {
+            "presentation_id": session.id,
+            "slide_index": slide_index,
+            "shape_count": len(shapes_list),
+            "shapes": shapes_list,
+        }
+
+    def set_table_cell_merge(self, params: dict[str, Any]) -> dict[str, Any]:
+        session = self._get_session(str(params["presentation_id"]))
+        slide_index = int(params["slide_index"])
+        slide = self._get_slide_obj(session, slide_index)
+
+        shape = self._require_shape(slide, params)
+
+        ensure(shape.has_table, "conflict", "Shape does not contain a table.")
+        table = shape.table
+
+        start_row = int(params["start_row"])
+        start_col = int(params["start_col"])
+        end_row = int(params["end_row"])
+        end_col = int(params["end_col"])
+
+        ensure(
+            0 <= start_row <= end_row < len(table.rows),
+            "validation_error",
+            f"Row indices must satisfy 0 <= start_row <= end_row < {len(table.rows)}.",
+        )
+        ensure(
+            0 <= start_col <= end_col < len(table.columns),
+            "validation_error",
+            f"Col indices must satisfy 0 <= start_col <= end_col < {len(table.columns)}.",
+        )
+
+        # Use python-pptx's native merge
+        start_cell = table.cell(start_row, start_col)
+        end_cell = table.cell(end_row, end_col)
+        start_cell.merge(end_cell)
+
+        self._persist(session)
+
+        return {
+            "success": True,
+            "presentation_id": session.id,
+            "slide_index": slide_index,
+            "shape_name": shape.name,
+            "merged_range": f"({start_row},{start_col})->({end_row},{end_col})",
+            "presentation_state": self.get_presentation_state({"presentation_id": session.id}),
+        }
+
+    # ------------------------------------------------------------------ #
+    # Phase 7 — Formatting & Fidelity tools
+    # ------------------------------------------------------------------ #
+
+    def set_paragraph_spacing(self, params: dict[str, Any]) -> dict[str, Any]:
+        session = self._get_session(str(params["presentation_id"]))
+        slide_index = int(params["slide_index"])
+        slide = self._get_slide_obj(session, slide_index)
+
+        shape = self._require_shape(slide, params)
+        ensure(shape.has_text_frame, "conflict", "Shape does not contain a text frame.")
+
+        paragraph_index = int(params["paragraph_index"])
+        ensure(
+            0 <= paragraph_index < len(shape.text_frame.paragraphs),
+            "validation_error",
+            f"Paragraph index out of bounds. Max: {len(shape.text_frame.paragraphs) - 1}",
+        )
+        paragraph = shape.text_frame.paragraphs[paragraph_index]
+
+        if "line_spacing" in params:
+            val = params["line_spacing"]
+            paragraph.line_spacing = Pt(float(val)) if val is not None else None
+
+        if "space_before" in params:
+            val = params["space_before"]
+            paragraph.space_before = Pt(float(val)) if val is not None else None
+
+        if "space_after" in params:
+            val = params["space_after"]
+            paragraph.space_after = Pt(float(val)) if val is not None else None
+
+        self._persist(session)
+
+        return {
+            "success": True,
+            "presentation_id": session.id,
+            "slide_index": slide_index,
+            "shape_name": shape.name,
+            "paragraph_index": paragraph_index,
+            "presentation_state": self.get_presentation_state({"presentation_id": session.id}),
+        }
+
+    def set_text_box_properties(self, params: dict[str, Any]) -> dict[str, Any]:
+        session = self._get_session(str(params["presentation_id"]))
+        slide_index = int(params["slide_index"])
+        slide = self._get_slide_obj(session, slide_index)
+
+        shape = self._require_shape(slide, params)
+        ensure(shape.has_text_frame, "conflict", "Shape does not contain a text frame.")
+
+        tf = shape.text_frame
+
+        if "margin_left" in params:
+            tf.margin_left = to_emu(params["margin_left"]) if params["margin_left"] else 0
+        if "margin_right" in params:
+            tf.margin_right = to_emu(params["margin_right"]) if params["margin_right"] else 0
+        if "margin_top" in params:
+            tf.margin_top = to_emu(params["margin_top"]) if params["margin_top"] else 0
+        if "margin_bottom" in params:
+            tf.margin_bottom = to_emu(params["margin_bottom"]) if params["margin_bottom"] else 0
+
+        if "word_wrap" in params:
+            tf.word_wrap = bool(params["word_wrap"]) if params["word_wrap"] is not None else None
+
+        if "auto_size" in params:
+            val = params["auto_size"]
+            if val is None:
+                tf.auto_size = None
+            else:
+                from pptx.enum.text import MSO_AUTO_SIZE
+
+                auto_map = {
+                    "none": MSO_AUTO_SIZE.NONE,
+                    "shape_to_fit_text": MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT,
+                    "text_to_fit_shape": MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE,
+                }
+                tf.auto_size = auto_map.get(str(val).lower())
+
+        if "vertical_alignment" in params:
+            val = params["vertical_alignment"]
+            if val is None:
+                tf.vertical_anchor = None
+            else:
+                from pptx.enum.text import MSO_VERTICAL_ANCHOR
+
+                val_map = {
+                    "top": MSO_VERTICAL_ANCHOR.TOP,
+                    "middle": MSO_VERTICAL_ANCHOR.MIDDLE,
+                    "bottom": MSO_VERTICAL_ANCHOR.BOTTOM,
+                }
+                tf.vertical_anchor = val_map.get(str(val).lower())
+
+        self._persist(session)
+        return {
+            "success": True,
+            "shape_name": shape.name,
+            "presentation_state": self.get_presentation_state({"presentation_id": session.id}),
+        }
+
+    def set_table_style(self, params: dict[str, Any]) -> dict[str, Any]:
+        session = self._get_session(str(params["presentation_id"]))
+        slide_index = int(params["slide_index"])
+        slide = self._get_slide_obj(session, slide_index)
+
+        shape = self._require_shape(slide, params)
+        ensure(shape.has_table, "conflict", "Shape does not contain a table.")
+
+        table = shape.table
+
+        if "first_row" in params:
+            table.first_row = bool(params["first_row"])
+        if "last_row" in params:
+            table.last_row = bool(params["last_row"])
+        if "first_col" in params:
+            table.first_col = bool(params["first_col"])
+        if "last_col" in params:
+            table.last_col = bool(params["last_col"])
+        if "banded_rows" in params:
+            table.horz_banding = bool(params["banded_rows"])
+        if "banded_cols" in params:
+            table.vert_banding = bool(params["banded_cols"])
+
+        # Hack to set style ID if provided (python-pptx doesn't formally expose style_id assignment easily)
+        if "style_id" in params:
+            style_id = str(params["style_id"]).strip()
+            # The tblPr element holds the style_id reference
+            tbl_pr = shape.element.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}tblPr")
+            if tbl_pr is not None:
+                tbl_style_id = tbl_pr.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}tableStyleId")
+                if tbl_style_id is None:
+                    # Create it if it doesn't exist
+                    tbl_style_id = etree.SubElement(
+                        tbl_pr, "{http://schemas.openxmlformats.org/drawingml/2006/main}tableStyleId"
+                    )
+                tbl_style_id.text = style_id
+
+        self._persist(session)
+
+        return {
+            "success": True,
+            "shape_name": shape.name,
+            "presentation_state": self.get_presentation_state({"presentation_id": session.id}),
+        }
+
+    def set_shape_fill_gradient(self, params: dict[str, Any]) -> dict[str, Any]:
+        session = self._get_session(str(params["presentation_id"]))
+        slide_index = int(params["slide_index"])
+        slide = self._get_slide_obj(session, slide_index)
+
+        shape = self._require_shape(slide, params)
+
+        fill = shape.fill
+        fill.gradient()
+
+        if "angle" in params:
+            fill.gradient_angle = float(params["angle"])
+
+        stops = params.get("stops", [])
+        if stops:
+            # Clear existing stops (python-pptx usually creates 2 default stops)
+            while len(fill.gradient_stops) > 0:
+                # Remove from underlying XML to clear it
+                gs_lst = shape.element.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}gsLst")
+                if gs_lst is not None:
+                    for gs in gs_lst:
+                        gs_lst.remove(gs)
+                # python-pptx doesn't have a direct clear() method for gradient_stops
+                break
+
+            # Adding new stops requires XML manipulation because python-pptx has limited write support for stops
+            gs_lst = shape.element.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}gsLst")
+            if gs_lst is None:
+                grad_fill = shape.element.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}gradFill")
+                if grad_fill is not None:
+                    gs_lst = etree.Element("{http://schemas.openxmlformats.org/drawingml/2006/main}gsLst")
+                    grad_fill.insert(0, gs_lst)
+
+            if gs_lst is not None:
+                for stop in stops:
+                    pos = int(float(stop.get("position", 0.0)) * 100000)  # 0 to 100000 (0% to 100%)
+                    hex_color = str(stop.get("color_hex", "FFFFFF")).strip("#")
+
+                    gs_elem = etree.SubElement(gs_lst, "{http://schemas.openxmlformats.org/drawingml/2006/main}gs")
+                    gs_elem.set("pos", str(pos))
+
+                    srgb_clr = etree.SubElement(
+                        gs_elem, "{http://schemas.openxmlformats.org/drawingml/2006/main}srgbClr"
+                    )
+                    srgb_clr.set("val", hex_color)
+
+        self._persist(session)
+        return {
+            "success": True,
+            "shape_name": shape.name,
+            "presentation_state": self.get_presentation_state({"presentation_id": session.id}),
+        }
+
+    def add_connector(self, params: dict[str, Any]) -> dict[str, Any]:
+        session = self._get_session(str(params["presentation_id"]))
+        slide_index = int(params["slide_index"])
+        slide = self._get_slide_obj(session, slide_index)
+
+        from pptx.enum.shapes import MSO_CONNECTOR
+
+        type_map = {
+            "straight": MSO_CONNECTOR.STRAIGHT,
+            "elbow": MSO_CONNECTOR.ELBOW,
+            "curve": MSO_CONNECTOR.CURVE,
+        }
+        ctype_str = str(params.get("connector_type", "straight")).lower()
+        connector_type = type_map.get(ctype_str, MSO_CONNECTOR.STRAIGHT)
+
+        # Temporary coordinates for creation
+        connector = slide.shapes.add_connector(connector_type, Emu(0), Emu(0), Emu(100), Emu(100))
+
+        if "begin_shape_name" in params or "begin_shape_id" in params:
+            b_shape = self._find_shape(slide, params.get("begin_shape_name") or params.get("begin_shape_id"))
+            b_idx = int(params.get("begin_connection_site", 0))
+            connector.begin_connect(b_shape, b_idx)
+
+        if "end_shape_name" in params or "end_shape_id" in params:
+            e_shape = self._find_shape(slide, params.get("end_shape_name") or params.get("end_shape_id"))
+            e_idx = int(params.get("end_connection_site", 0))
+            connector.end_connect(e_shape, e_idx)
+
+        # Apply formatting
+        if "color_hex" in params:
+            connector.line.color.rgb = RGBColor.from_string(str(params["color_hex"]).strip("#"))
+
+        if "width_pt" in params:
+            connector.line.width = Pt(float(params["width_pt"]))
+
+        self._persist(session)
+        return {
+            "success": True,
+            "shape_name": connector.name,
+            "shape_id": int(connector.shape_id),
             "presentation_state": self.get_presentation_state({"presentation_id": session.id}),
         }
 
@@ -1849,7 +2508,37 @@ class OOXMLEngine(BaseEngine):
         if data.get("underline") is not None:
             run.font.underline = bool(data["underline"])
         if data.get("color_hex"):
-            run.font.color.rgb = RGBColor.from_string(_normalize_color(str(data["color_hex"])))
+            run.font.color.rgb = RGBColor.from_string(normalize_color(str(data["color_hex"])))
+
+    def _write_paragraphs(self, text_frame, paragraphs_data: list[dict[str, Any]]) -> None:
+        """Write rich paragraph data into a text frame (clears existing content)."""
+        text_frame.clear()
+        for p_idx, p_data in enumerate(paragraphs_data):
+            paragraph = text_frame.paragraphs[0] if p_idx == 0 else text_frame.add_paragraph()
+
+            alignment = p_data.get("alignment")
+            if alignment and alignment in self._ALIGN_MAP:
+                paragraph.alignment = self._ALIGN_MAP[alignment]
+
+            level = p_data.get("level")
+            if level is not None:
+                paragraph.level = int(level)
+
+            runs_data = p_data.get("runs", [])
+            if not runs_data:
+                run = paragraph.add_run()
+                run.text = str(p_data.get("text", ""))
+            else:
+                for r_data in runs_data:
+                    run = paragraph.add_run()
+                    run.text = str(r_data.get("text", ""))
+                    self._apply_run_formatting(run, r_data)
+
+    def _require_shape(self, slide, params: dict[str, Any]):
+        """Resolve a shape from params by shape_name or shape_id, raising on missing."""
+        identifier = params.get("shape_name") or params.get("shape_id")
+        ensure(identifier is not None, "validation_error", "shape_name or shape_id is required.")
+        return self._find_shape(slide, identifier)
 
     def _extract_text_items(self, shapes, depth: int = 0) -> list[dict[str, Any]]:
         """Recursively extract text from all shapes including tables, groups, etc."""
@@ -1960,13 +2649,7 @@ class OOXMLEngine(BaseEngine):
 
             alignment = None
             if paragraph.alignment is not None:
-                alignment_map = {
-                    PP_ALIGN.LEFT: "left",
-                    PP_ALIGN.CENTER: "center",
-                    PP_ALIGN.RIGHT: "right",
-                    PP_ALIGN.JUSTIFY: "justify",
-                }
-                alignment = alignment_map.get(paragraph.alignment)
+                alignment = self._REVERSE_ALIGN_MAP.get(paragraph.alignment)
 
             paragraphs.append(
                 {
@@ -2096,9 +2779,9 @@ class OOXMLEngine(BaseEngine):
             if fill_hex:
                 try:
                     cell.fill.solid()
-                    cell.fill.fore_color.rgb = RGBColor.from_string(_normalize_color(str(fill_hex)))
-                except Exception:
-                    pass
+                    cell.fill.fore_color.rgb = RGBColor.from_string(normalize_color(str(fill_hex)))
+                except Exception as exc:
+                    print(f"[pptx] Warning: could not set cell fill: {exc}", file=sys.stderr)
 
     def _replace_in_shapes(self, shapes, find_text: str, replace_text: str, case_sensitive: bool) -> int:
         replacements = 0

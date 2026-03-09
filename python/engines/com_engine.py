@@ -11,6 +11,7 @@ from typing import Any
 from com_worker import COMWorker
 from engines.base import BaseEngine, EngineSession
 from errors import BridgeError, ensure
+from utils.colors import normalize_color
 from utils.paths import validate_existing_file, validate_output_file
 from utils.units import to_emu
 
@@ -20,18 +21,8 @@ except Exception:  # pragma: no cover
     win32com = None  # type: ignore[assignment]
 
 
-def _normalize_color(color_value: str) -> str:
-    value = color_value.strip()
-    if value.startswith("#"):
-        value = value[1:]
-    if len(value) != 6:
-        raise BridgeError("validation_error", "Color must be 6 hex chars.", {"color": color_value})
-    int(value, 16)
-    return value.upper()
-
-
 def _hex_to_bgr_int(color_value: str) -> int:
-    color = _normalize_color(color_value)
+    color = normalize_color(color_value)
     rr = int(color[0:2], 16)
     gg = int(color[2:4], 16)
     bb = int(color[4:6], 16)
@@ -845,6 +836,48 @@ class COMEngine(BaseEngine):
 
     def find_replace_text(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
         return self._com_stub("find_replace_text", params)
+
+    # --- Phase 5 stubs ---
+
+    def add_chart(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("add_chart", params)
+
+    def get_chart_data(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("get_chart_data", params)
+
+    def update_chart_data(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("update_chart_data", params)
+
+    def set_chart_style(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("set_chart_style", params)
+
+    # --- Phase 6 stubs ---
+
+    def copy_shape_between_decks(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("copy_shape_between_decks", params)
+
+    def get_slide_shapes(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("get_slide_shapes", params)
+
+    def set_table_cell_merge(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("set_table_cell_merge", params)
+
+    # --- Phase 7 stubs ---
+
+    def set_paragraph_spacing(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("set_paragraph_spacing", params)
+
+    def set_text_box_properties(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("set_text_box_properties", params)
+
+    def set_table_style(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("set_table_style", params)
+
+    def set_shape_fill_gradient(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("set_shape_fill_gradient", params)
+
+    def add_connector(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
+        return self._com_stub("add_connector", params)
 
     def shutdown(self) -> None:  # pragma: no cover - Windows only
         for session_id in list(self.sessions.keys()):
