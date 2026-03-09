@@ -1,0 +1,1597 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PowerPoint MCP Test UI</title>
+  <style>
+    :root {
+      --bg-0: #1e1e2e;
+      --bg-1: #282840;
+      --bg-2: #313150;
+      --bg-3: #3b3b5c;
+      --text-0: #cdd6f4;
+      --text-1: #a6adc8;
+      --text-2: #7f849c;
+      --blue: #89b4fa;
+      --green: #a6e3a1;
+      --red: #f38ba8;
+      --yellow: #f9e2af;
+      --purple: #cba6f7;
+      --teal: #94e2d5;
+      --border: #45475a;
+      --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg-0);
+      color: var(--text-0);
+      height: 100vh;
+      display: grid;
+      grid-template-rows: 44px 1fr;
+      grid-template-columns: 250px 1fr 1fr;
+      grid-template-areas: "top top top" "side center right";
+      overflow: hidden;
+    }
+
+    body.chat-mode {
+      grid-template-columns: 250px 1fr;
+      grid-template-areas: "top top" "side chat";
+    }
+
+    body.chat-mode #center,
+    body.chat-mode #right {
+      display: none;
+    }
+
+    body.chat-mode #chat-panel {
+      display: flex;
+    }
+
+    /* Top bar */
+    #topbar {
+      grid-area: top;
+      background: var(--bg-1);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+
+    #topbar .logo {
+      font-weight: 700;
+      color: var(--blue);
+      font-size: 15px;
+      letter-spacing: 0.5px;
+    }
+
+    #topbar .spacer {
+      flex: 1;
+    }
+
+    .ws-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 4px;
+    }
+
+    .ws-dot.on {
+      background: var(--green);
+    }
+
+    .ws-dot.off {
+      background: var(--red);
+    }
+
+    .mode-tabs {
+      display: flex;
+      gap: 2px;
+    }
+
+    .mode-tab {
+      padding: 6px 14px;
+      border: none;
+      border-radius: 4px 4px 0 0;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      background: var(--bg-2);
+      color: var(--text-2);
+    }
+
+    .mode-tab.active {
+      background: var(--blue);
+      color: var(--bg-0);
+    }
+
+    /* Sidebar */
+    #sidebar {
+      grid-area: side;
+      background: var(--bg-1);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #tool-search {
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--bg-2);
+      border: none;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-0);
+      font-size: 13px;
+      outline: none;
+    }
+
+    #tool-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 0;
+    }
+
+    .cat-header {
+      padding: 6px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-2);
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+    }
+
+    .cat-header:hover {
+      color: var(--text-1);
+    }
+
+    .cat-header::after {
+      content: '\25B6';
+      font-size: 8px;
+      transition: transform .15s;
+    }
+
+    .cat-header.open::after {
+      transform: rotate(90deg);
+    }
+
+    .cat-body {
+      display: none;
+    }
+
+    .cat-body.open {
+      display: block;
+    }
+
+    .tool-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+      padding: 5px 12px 5px 20px;
+      border: none;
+      background: none;
+      color: var(--text-0);
+      font-size: 12.5px;
+      cursor: pointer;
+      text-align: left;
+      border-radius: 0;
+    }
+
+    .tool-btn:hover {
+      background: var(--bg-2);
+    }
+
+    .tool-btn.active {
+      background: var(--blue);
+      color: var(--bg-0);
+      font-weight: 600;
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .dot.r {
+      background: var(--green);
+    }
+
+    .dot.w {
+      background: var(--red);
+    }
+
+    /* Center panel */
+    #center {
+      grid-area: center;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-right: 1px solid var(--border);
+    }
+
+    .session-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: var(--bg-1);
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+
+    .session-bar select {
+      background: var(--bg-2);
+      color: var(--text-0);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 12px;
+      font-family: var(--mono);
+      max-width: 200px;
+    }
+
+    .sbtn {
+      padding: 4px 10px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .sbtn-blue {
+      background: var(--blue);
+      color: var(--bg-0);
+    }
+
+    .sbtn-dim {
+      background: var(--bg-2);
+      color: var(--text-1);
+    }
+
+    .sbtn:hover {
+      opacity: 0.85;
+    }
+
+    #tool-info {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    #tool-info h2 {
+      font-size: 15px;
+      margin-bottom: 4px;
+    }
+
+    #tool-info p {
+      font-size: 12px;
+      color: var(--text-1);
+    }
+
+    .badge {
+      display: inline-block;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-weight: 600;
+      margin-left: 8px;
+    }
+
+    .badge-read {
+      background: var(--green);
+      color: var(--bg-0);
+    }
+
+    .badge-write {
+      background: var(--red);
+      color: var(--bg-0);
+    }
+
+    /* Form */
+    #form-wrap {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 16px;
+    }
+
+    .field {
+      margin-bottom: 10px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      margin-bottom: 3px;
+      color: var(--text-1);
+    }
+
+    .field label .req {
+      color: var(--red);
+    }
+
+    .field input,
+    .field select,
+    .field textarea {
+      width: 100%;
+      padding: 6px 8px;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text-0);
+      font-family: var(--mono);
+      font-size: 12px;
+      outline: none;
+    }
+
+    .field input:focus,
+    .field select:focus,
+    .field textarea:focus {
+      border-color: var(--blue);
+    }
+
+    .field textarea {
+      resize: vertical;
+      min-height: 60px;
+    }
+
+    .field .desc {
+      font-size: 11px;
+      color: var(--text-2);
+      margin-top: 2px;
+    }
+
+    .field-check {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .field-check input[type=checkbox] {
+      width: auto;
+      accent-color: var(--blue);
+    }
+
+    #actions {
+      display: flex;
+      gap: 8px;
+      padding: 10px 16px;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    #btn-exec {
+      padding: 8px 20px;
+      border: none;
+      border-radius: 4px;
+      background: var(--blue);
+      color: var(--bg-0);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    #btn-exec:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+
+    #btn-exec:hover:not(:disabled) {
+      opacity: 0.9;
+    }
+
+    #btn-clear {
+      padding: 8px 14px;
+      border: none;
+      border-radius: 4px;
+      background: var(--bg-2);
+      color: var(--text-1);
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    #btn-raw {
+      padding: 8px 14px;
+      border: none;
+      border-radius: 4px;
+      background: var(--bg-2);
+      color: var(--text-1);
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    #raw-editor {
+      display: none;
+      flex: 1;
+      margin: 12px 16px;
+      padding: 10px;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text-0);
+      font-family: var(--mono);
+      font-size: 12px;
+      resize: none;
+    }
+
+    /* Right panel */
+    #right {
+      grid-area: right;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .panel-hdr {
+      padding: 6px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-2);
+      background: var(--bg-1);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .panel-hdr button {
+      font-size: 10px;
+      padding: 2px 8px;
+      border: none;
+      border-radius: 3px;
+      background: var(--bg-2);
+      color: var(--text-2);
+      cursor: pointer;
+    }
+
+    #result-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 12px;
+      font-family: var(--mono);
+      font-size: 12px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      min-height: 0;
+    }
+
+    .res-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-family: var(--sans);
+    }
+
+    .res-header .name {
+      font-weight: 600;
+      color: var(--blue);
+    }
+
+    .res-header .dur {
+      color: var(--text-2);
+      font-size: 11px;
+    }
+
+    .res-header .ok {
+      color: var(--green);
+      font-weight: 700;
+    }
+
+    .res-header .fail {
+      color: var(--red);
+      font-weight: 700;
+    }
+
+    .snapshot-img {
+      max-width: 100%;
+      margin-top: 8px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+    }
+
+    .jk {
+      color: var(--blue);
+    }
+
+    .js {
+      color: var(--green);
+    }
+
+    .jn {
+      color: var(--yellow);
+    }
+
+    .jb {
+      color: var(--purple);
+    }
+
+    .jnull {
+      color: var(--red);
+    }
+
+    #log-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 8px;
+      font-family: var(--mono);
+      font-size: 11px;
+      border-top: 1px solid var(--border);
+      min-height: 120px;
+      max-height: 40vh;
+    }
+
+    .log {
+      padding: 1px 0;
+    }
+
+    .log .lt {
+      color: var(--text-2);
+      margin-right: 6px;
+    }
+
+    .log .ll {
+      margin-right: 6px;
+      font-weight: 600;
+    }
+
+    .log.DEBUG .ll {
+      color: var(--text-2);
+    }
+
+    .log.INFO .ll {
+      color: var(--teal);
+    }
+
+    .log.WARNING .ll {
+      color: var(--yellow);
+    }
+
+    .log.ERROR .ll {
+      color: var(--red);
+    }
+
+    /* Spinner */
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--bg-2);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--bg-0);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--bg-3);
+      border-radius: 3px;
+    }
+
+    /* ===== Chat Panel ===== */
+    #chat-panel {
+      grid-area: chat;
+      display: none;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .chat-top-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: var(--bg-1);
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+
+    .chat-state-badge {
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .state-clarifying {
+      background: #4a3a00;
+      color: var(--yellow);
+    }
+
+    .state-ready {
+      background: #1a3a1a;
+      color: var(--green);
+    }
+
+    .state-executing {
+      background: #1a2a4a;
+      color: var(--blue);
+    }
+
+    .state-complete {
+      background: #1a3a1a;
+      color: var(--green);
+    }
+
+    .state-failed {
+      background: #3a1a1a;
+      color: var(--red);
+    }
+
+    .state-cancelled {
+      background: #2a2a2a;
+      color: var(--text-2);
+    }
+
+    #chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* Message bubbles */
+    .msg {
+      max-width: 80%;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.5;
+      animation: msgIn .2s ease;
+    }
+
+    @keyframes msgIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .msg-user {
+      align-self: flex-end;
+      background: var(--blue);
+      color: var(--bg-0);
+      border-bottom-right-radius: 4px;
+    }
+
+    .msg-bot {
+      align-self: flex-start;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 4px;
+    }
+
+    .msg-system {
+      align-self: center;
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      color: var(--text-2);
+      font-size: 11px;
+      padding: 6px 14px;
+      border-radius: 10px;
+    }
+
+    .msg-bot .msg-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--teal);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .msg-bot h4 {
+      font-size: 13px;
+      margin: 8px 0 4px;
+      color: var(--blue);
+    }
+
+    .msg-bot pre {
+      font-family: var(--mono);
+      font-size: 11px;
+      background: var(--bg-0);
+      padding: 8px;
+      border-radius: 6px;
+      margin: 6px 0;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    /* Questions in chat */
+    .chat-question {
+      margin: 8px 0;
+      padding: 8px 10px;
+      background: var(--bg-0);
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+
+    .chat-question .q-text {
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .chat-question .q-choice {
+      display: block;
+      margin: 3px 0;
+      padding: 5px 10px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--bg-2);
+      color: var(--text-0);
+      cursor: pointer;
+      font-size: 12px;
+      text-align: left;
+      width: 100%;
+    }
+
+    .chat-question .q-choice:hover {
+      border-color: var(--blue);
+      background: var(--bg-3);
+    }
+
+    .chat-question .q-choice.selected {
+      border-color: var(--green);
+      background: #1a3a1a;
+    }
+
+    /* Plan steps in chat */
+    .step-list {
+      margin: 6px 0;
+    }
+
+    .step-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      padding: 3px 0;
+    }
+
+    .step-icon {
+      width: 18px;
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      font-size: 10px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .step-pending {
+      background: var(--bg-3);
+      color: var(--text-2);
+    }
+
+    .step-done {
+      background: var(--green);
+      color: var(--bg-0);
+    }
+
+    .step-failed {
+      background: var(--red);
+      color: var(--bg-0);
+    }
+
+    .step-running {
+      background: var(--blue);
+      color: var(--bg-0);
+      animation: spin .8s linear infinite;
+    }
+
+    /* Chat action buttons */
+    .chat-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+
+    .chat-action {
+      padding: 6px 14px;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .chat-action-primary {
+      background: var(--blue);
+      color: var(--bg-0);
+    }
+
+    .chat-action-danger {
+      background: var(--red);
+      color: var(--bg-0);
+    }
+
+    .chat-action-dim {
+      background: var(--bg-3);
+      color: var(--text-1);
+    }
+
+    .chat-action:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+
+    .chat-action:hover:not(:disabled) {
+      opacity: 0.85;
+    }
+
+    /* Chat input */
+    #chat-input-bar {
+      display: flex;
+      gap: 8px;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      background: var(--bg-1);
+      flex-shrink: 0;
+    }
+
+    #chat-input {
+      flex: 1;
+      padding: 10px 14px;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-0);
+      font-size: 13px;
+      outline: none;
+      resize: none;
+      font-family: var(--sans);
+      max-height: 100px;
+    }
+
+    #chat-input:focus {
+      border-color: var(--blue);
+    }
+
+    #chat-send {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      background: var(--blue);
+      color: var(--bg-0);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      align-self: flex-end;
+    }
+
+    #chat-send:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+
+    #chat-send:hover:not(:disabled) {
+      opacity: 0.9;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Top Bar -->
+  <header id="topbar">
+    <span class="logo">PPTX MCP</span>
+    <div class="mode-tabs">
+      <button class="mode-tab active" id="tab-tools" onclick="switchMode('tools')">Tools</button>
+      <button class="mode-tab" id="tab-chat" onclick="switchMode('chat')">Agent Chat</button>
+    </div>
+    <span id="engine-label" style="color:var(--text-2)">Loading...</span>
+    <span class="spacer"></span>
+    <span><span class="ws-dot off" id="ws-dot"></span><span id="ws-label">WS: --</span></span>
+  </header>
+
+  <!-- Sidebar -->
+  <nav id="sidebar">
+    <input type="text" id="tool-search" placeholder="Search tools..." oninput="filterTools(this.value)">
+    <div id="tool-list"></div>
+  </nav>
+
+  <!-- Center (Tools mode) -->
+  <main id="center">
+    <div class="session-bar">
+      <label style="font-weight:600; white-space:nowrap">Session:</label>
+      <select id="sess-sel" onchange="onSessionChange(this.value)">
+        <option value="">-- none --</option>
+      </select>
+      <button class="sbtn sbtn-blue" onclick="quickCreate()">+ New</button>
+      <button class="sbtn sbtn-dim" onclick="openDialog()">Open</button>
+      <button class="sbtn sbtn-dim" onclick="refreshSessions()">Refresh</button>
+    </div>
+    <div id="tool-info">
+      <h2>Select a tool</h2>
+      <p>Choose a tool from the sidebar to get started.</p>
+    </div>
+    <div id="form-wrap"></div>
+    <textarea id="raw-editor" placeholder='{"key": "value"}'></textarea>
+    <div id="actions">
+      <button id="btn-exec" disabled onclick="execTool()">Execute</button>
+      <button id="btn-clear" onclick="clearForm()">Clear</button>
+      <button id="btn-raw" onclick="toggleRaw()">Raw JSON</button>
+    </div>
+  </main>
+
+  <!-- Right (Tools mode) -->
+  <aside id="right">
+    <div class="panel-hdr">Result <button onclick="clearResult()">Clear</button></div>
+    <div id="result-area"><span style="color:var(--text-2)">No results yet.</span></div>
+    <div class="panel-hdr">Logs <button onclick="clearLogs()">Clear</button></div>
+    <div id="log-area"></div>
+  </aside>
+
+  <!-- Chat Panel (Chat mode) -->
+  <div id="chat-panel">
+    <div class="chat-top-bar">
+      <label style="font-weight:600; white-space:nowrap">Session:</label>
+      <select id="chat-sess-sel" onchange="onSessionChange(this.value)">
+        <option value="">-- none --</option>
+      </select>
+      <button class="sbtn sbtn-blue" onclick="quickCreate()">+ New</button>
+      <button class="sbtn sbtn-dim" onclick="openDialog()">Open</button>
+      <span class="spacer" style="flex:1"></span>
+      <span id="chat-state-label"></span>
+      <button class="sbtn sbtn-dim" onclick="chatReset()" title="Start a new conversation">New Chat</button>
+    </div>
+    <div id="chat-messages">
+      <div class="msg msg-system">Start a conversation with the Agent Orchestrator. Select a presentation session, then
+        describe what you want to do.</div>
+    </div>
+    <div id="chat-input-bar">
+      <textarea id="chat-input" rows="1" placeholder="Describe what you want to do with your slides..."
+        onkeydown="chatKeyDown(event)"></textarea>
+      <button id="chat-send" onclick="chatSend()">Send</button>
+    </div>
+  </div>
+
+  <script>
+    // ===== State =====
+    const S = {
+      tools: {}, toolMap: {}, selected: null, pid: '', sessions: [],
+      ws: null, rawMode: false, executing: false, history: [],
+      mode: 'tools',
+      // Chat state
+      chat: { taskId: null, state: null, busy: false, questions: [], answers: {} },
+    };
+
+    // ===== Init =====
+    document.addEventListener('DOMContentLoaded', async () => {
+      const [toolsResp, engineResp] = await Promise.all([
+        fetch('/api/tools').then(r => r.json()),
+        fetch('/api/engine').then(r => r.json()),
+      ]);
+      S.tools = toolsResp;
+      for (const cat of Object.keys(S.tools))
+        for (const t of S.tools[cat]) S.toolMap[t.name] = t;
+      renderSidebar();
+      if (engineResp.success) {
+        const e = engineResp.result;
+        $('engine-label').textContent = `Engine: ${e.engine || 'OOXML'} | Python ${e.python_version || '?'}`;
+      }
+      refreshSessions();
+      connectWS();
+      document.addEventListener('keydown', e => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); if (S.mode === 'tools') execTool(); else chatSend(); }
+        if (e.key === 'Escape') clearForm();
+        if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) {
+          e.preventDefault(); $('tool-search').focus();
+        }
+      });
+    });
+
+    const $ = id => document.getElementById(id);
+    function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+    // ===== Mode switching =====
+    function switchMode(mode) {
+      S.mode = mode;
+      document.body.classList.toggle('chat-mode', mode === 'chat');
+      $('tab-tools').classList.toggle('active', mode === 'tools');
+      $('tab-chat').classList.toggle('active', mode === 'chat');
+      if (mode === 'chat') syncChatSessionSel();
+    }
+
+    function syncChatSessionSel() {
+      const main = $('sess-sel'); const chat = $('chat-sess-sel');
+      chat.innerHTML = main.innerHTML; chat.value = main.value;
+    }
+
+    // ===== Sidebar =====
+    function renderSidebar() {
+      const wrap = $('tool-list'); wrap.innerHTML = '';
+      for (const [cat, tools] of Object.entries(S.tools)) {
+        const hdr = document.createElement('div');
+        hdr.className = 'cat-header open'; hdr.textContent = `${cat} (${tools.length})`;
+        hdr.onclick = () => { hdr.classList.toggle('open'); body.classList.toggle('open'); };
+        const body = document.createElement('div'); body.className = 'cat-body open';
+        for (const t of tools) {
+          const btn = document.createElement('button'); btn.className = 'tool-btn'; btn.dataset.name = t.name;
+          btn.innerHTML = `<span class="dot ${t.mutating ? 'w' : 'r'}"></span>${t.name.replace('pptx_', '')}`;
+          btn.onclick = () => { if (S.mode === 'chat') switchMode('tools'); selectTool(t.name); };
+          body.appendChild(btn);
+        }
+        wrap.appendChild(hdr); wrap.appendChild(body);
+      }
+    }
+
+    function filterTools(q) {
+      q = q.toLowerCase();
+      document.querySelectorAll('.tool-btn').forEach(btn => { btn.style.display = btn.dataset.name.toLowerCase().includes(q) ? '' : 'none'; });
+      if (q) document.querySelectorAll('.cat-body').forEach(b => b.classList.add('open'));
+    }
+
+    // ===== Tool selection/form/exec (unchanged) =====
+    function selectTool(name) {
+      S.selected = name; const t = S.toolMap[name];
+      document.querySelectorAll('.tool-btn').forEach(b => b.classList.toggle('active', b.dataset.name === name));
+      $('tool-info').innerHTML = `<h2>${name.replace('pptx_', '')} <span class="badge ${t.mutating ? 'badge-write' : 'badge-read'}">${t.mutating ? 'WRITE' : 'READ'}</span></h2><p>${escHtml(t.description)}</p>`;
+      buildForm(t); $('btn-exec').disabled = false;
+      if (S.rawMode) $('raw-editor').value = JSON.stringify(collectParams(t), null, 2);
+    }
+    function buildForm(tool) {
+      const wrap = $('form-wrap'); wrap.innerHTML = '';
+      for (const p of tool.params) {
+        const div = document.createElement('div'); div.className = 'field';
+        if (p.type === 'boolean') {
+          div.innerHTML = `<div class="field-check"><input type="checkbox" name="${p.name}" data-type="boolean" id="f-${p.name}"><label for="f-${p.name}">${p.name}${p.required ? '<span class="req"> *</span>' : ''}</label></div>`;
+          if (p.description) div.innerHTML += `<div class="desc">${escHtml(p.description)}</div>`;
+        } else if (p.type === 'enum') {
+          let opts = (p.enum_values || []).map(v => `<option value="${v}">${v}</option>`).join('');
+          div.innerHTML = `<label>${p.name}${p.required ? '<span class="req"> *</span>' : ''}</label><select name="${p.name}" data-type="enum"><option value="">-- select --</option>${opts}</select>`;
+          if (p.description) div.innerHTML += `<div class="desc">${escHtml(p.description)}</div>`;
+        } else if (p.type === 'array' || p.type === 'object') {
+          div.innerHTML = `<label>${p.name}${p.required ? '<span class="req"> *</span>' : ''}</label><textarea name="${p.name}" data-type="${p.type}" placeholder='${escHtml(p.placeholder || "[]")}' rows="3"></textarea>`;
+          if (p.description) div.innerHTML += `<div class="desc">${escHtml(p.description)}</div>`;
+        } else {
+          const inputType = p.type === 'number' ? 'number' : 'text';
+          const ph = p.placeholder || (p.type === 'measurement' ? 'e.g. 2in, 24pt' : p.type === 'uuid' ? 'UUID' : '');
+          div.innerHTML = `<label>${p.name}${p.required ? '<span class="req"> *</span>' : ''}</label><input type="${inputType}" name="${p.name}" data-type="${p.type}" placeholder="${escHtml(ph)}"${p.type === 'number' ? ' step="any"' : ''}>`;
+          if (p.description) div.innerHTML += `<div class="desc">${escHtml(p.description)}</div>`;
+        }
+        if (p.auto_fill === 'presentation_id' && S.pid) {
+          setTimeout(() => { const inp = wrap.querySelector(`[name="${p.name}"]`); if (inp && !inp.value) inp.value = S.pid; }, 0);
+        }
+        wrap.appendChild(div);
+      }
+    }
+    function collectParams(tool) {
+      if (S.rawMode) { try { return JSON.parse($('raw-editor').value || '{}'); } catch { return {}; } }
+      const params = {}; const form = $('form-wrap');
+      for (const inp of form.querySelectorAll('[name]')) {
+        const v = inp.type === 'checkbox' ? inp.checked : inp.value.trim(); const t = inp.dataset.type;
+        if (t === 'boolean') { if (inp.checked) params[inp.name] = true; continue; }
+        if (!v) continue;
+        switch (t) {
+          case 'number': params[inp.name] = parseFloat(v); break;
+          case 'array': case 'object': try { params[inp.name] = JSON.parse(v); } catch (e) { alert(`Invalid JSON for ${inp.name}: ${e.message}`); return null; } break;
+          case 'measurement': params[inp.name] = /^\d+$/.test(v) ? parseInt(v) : v; break;
+          default: params[inp.name] = v;
+        }
+      }
+      return params;
+    }
+    async function execTool() {
+      if (!S.selected || S.executing) return;
+      const tool = S.toolMap[S.selected]; const params = collectParams(tool); if (params === null) return;
+      S.executing = true; $('btn-exec').disabled = true; $('btn-exec').innerHTML = '<span class="spinner"></span>Running...';
+      const start = performance.now();
+      try {
+        const resp = await fetch('/api/dispatch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ method: S.selected, params }) });
+        const data = resp.ok ? await resp.json() : (await resp.json()).detail || await resp.text();
+        const elapsed = performance.now() - start;
+        if (resp.ok) { showResult(data.result, elapsed, S.selected, true); const pid = data.result?.presentation_id; if (pid && !S.pid) { S.pid = pid; refreshSessions(); } }
+        else showResult(data, elapsed, S.selected, false);
+      } catch (err) { showResult({ error: err.message }, performance.now() - start, S.selected, false); }
+      finally { S.executing = false; $('btn-exec').disabled = false; $('btn-exec').textContent = 'Execute'; }
+    }
+    function showResult(data, elapsed, name, ok) {
+      const area = $('result-area'); const json = JSON.stringify(data, null, 2);
+      let html = `<div class="res-header"><span class="name">${name.replace('pptx_', '')}</span><span class="dur">${Math.round(elapsed)}ms</span><span class="${ok ? 'ok' : 'fail'}">${ok ? 'OK' : 'FAIL'}</span></div>`;
+      html += syntaxHL(json);
+      if (data?.snapshot_base64) html += `<img class="snapshot-img" src="data:image/jpeg;base64,${data.snapshot_base64}" alt="Slide snapshot">`;
+      area.innerHTML = html;
+    }
+    function syntaxHL(json) {
+      return escHtml(json).replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+        m => { let c = 'jn'; if (/^"/.test(m)) c = /:$/.test(m) ? 'jk' : 'js'; else if (/true|false/.test(m)) c = 'jb'; else if (/null/.test(m)) c = 'jnull'; return `<span class="${c}">${m}</span>`; });
+    }
+    function clearResult() { $('result-area').innerHTML = '<span style="color:var(--text-2)">No results yet.</span>'; }
+
+    // ===== Sessions =====
+    async function refreshSessions() {
+      try {
+        const resp = await fetch('/api/sessions'); const data = await resp.json();
+        if (data.success && data.result) {
+          S.sessions = data.result.presentations || [];
+          for (const selId of ['sess-sel', 'chat-sess-sel']) {
+            const sel = $(selId); if (!sel) continue; const cur = sel.value;
+            sel.innerHTML = '<option value="">-- none --</option>';
+            for (const s of S.sessions) {
+              const opt = document.createElement('option'); opt.value = s.presentation_id;
+              const label = s.original_path ? s.original_path.split('/').pop().split('\\').pop() : 'New';
+              opt.textContent = `${label} (${s.presentation_id.slice(0, 8)})`; sel.appendChild(opt);
+            }
+            if (S.pid) sel.value = S.pid; else if (cur) sel.value = cur;
+          }
+        }
+      } catch (e) { console.error('refreshSessions', e); }
+    }
+    function onSessionChange(val) {
+      S.pid = val;
+      $('sess-sel').value = val; $('chat-sess-sel').value = val;
+      document.querySelectorAll('[name="presentation_id"],[name="source_presentation_id"],[name="target_presentation_id"],[name="presentation_id_a"],[name="presentation_id_b"]').forEach(inp => { if (!inp.value) inp.value = val; });
+    }
+    async function quickCreate() {
+      try {
+        const resp = await fetch('/api/dispatch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ method: 'pptx_create_presentation', params: {} }) });
+        const data = await resp.json();
+        if (data.success && data.result?.presentation_id) { S.pid = data.result.presentation_id; refreshSessions(); if (S.mode === 'tools') showResult(data.result, 0, 'create_presentation', true); else addChatMsg('system', 'Presentation created: ' + S.pid.slice(0, 8) + '...'); }
+      } catch (e) { alert('Create failed: ' + e.message); }
+    }
+    function openDialog() {
+      const path = prompt('Enter absolute path to .pptx file:'); if (!path) return;
+      fetch('/api/dispatch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ method: 'pptx_open_presentation', params: { file_path: path } }) })
+        .then(r => r.json()).then(data => {
+          if (data.success && data.result?.presentation_id) { S.pid = data.result.presentation_id; refreshSessions(); if (S.mode === 'tools') showResult(data.result, 0, 'open_presentation', true); else addChatMsg('system', 'Opened: ' + path.split('/').pop()); }
+          else if (S.mode === 'tools') showResult(data.detail || data, 0, 'open_presentation', false);
+        }).catch(e => alert('Open failed: ' + e.message));
+    }
+    function toggleRaw() {
+      S.rawMode = !S.rawMode; $('form-wrap').style.display = S.rawMode ? 'none' : ''; $('raw-editor').style.display = S.rawMode ? 'block' : 'none';
+      $('btn-raw').textContent = S.rawMode ? 'Form Mode' : 'Raw JSON';
+      if (S.rawMode && S.selected) $('raw-editor').value = JSON.stringify(collectParams(S.toolMap[S.selected]), null, 2);
+    }
+    function clearForm() {
+      $('form-wrap').querySelectorAll('input,select,textarea').forEach(el => { if (el.type === 'checkbox') el.checked = false; else el.value = ''; });
+      $('raw-editor').value = '';
+    }
+
+    // ===== WebSocket logs =====
+    function connectWS() {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(`${proto}//${location.host}/ws/logs`);
+      ws.onopen = () => { $('ws-dot').className = 'ws-dot on'; $('ws-label').textContent = 'WS: Connected'; };
+      ws.onclose = () => { $('ws-dot').className = 'ws-dot off'; $('ws-label').textContent = 'WS: Disconnected'; setTimeout(connectWS, 3000); };
+      ws.onmessage = e => { try { appendLog(JSON.parse(e.data)); } catch { } };
+      S.ws = ws;
+    }
+    function appendLog(log) {
+      const area = $('log-area'); const div = document.createElement('div'); div.className = `log ${log.level}`;
+      const time = new Date(log.timestamp * 1000).toLocaleTimeString();
+      div.innerHTML = `<span class="lt">${time}</span><span class="ll">[${log.level}]</span>${escHtml(log.message)}`;
+      area.appendChild(div); area.scrollTop = area.scrollHeight; while (area.children.length > 500) area.firstChild.remove();
+    }
+    function clearLogs() { $('log-area').innerHTML = ''; }
+
+    // =======================================================================
+    // ===== CHAT / AGENT ORCHESTRATOR =======================================
+    // =======================================================================
+
+    async function apiCall(method, params) {
+      const resp = await fetch('/api/dispatch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ method, params }) });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error((data.detail?.error?.message) || (data.error?.message) || JSON.stringify(data));
+      return data.result;
+    }
+
+    function addChatMsg(type, html) {
+      const area = $('chat-messages');
+      const div = document.createElement('div');
+      div.className = `msg msg-${type}`;
+      div.innerHTML = html;
+      area.appendChild(div);
+      area.scrollTop = area.scrollHeight;
+      return div;
+    }
+
+    function setChatState(state) {
+      S.chat.state = state;
+      const lbl = $('chat-state-label');
+      if (!state) { lbl.innerHTML = ''; return; }
+      lbl.innerHTML = `<span class="chat-state-badge state-${state}">${state}</span>`;
+    }
+
+    function chatSetBusy(busy) {
+      S.chat.busy = busy;
+      $('chat-send').disabled = busy;
+      $('chat-input').disabled = busy;
+    }
+
+    function chatKeyDown(e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chatSend(); }
+    }
+
+    function chatReset() {
+      S.chat = { taskId: null, state: null, busy: false, questions: [], answers: {} };
+      setChatState(null);
+      $('chat-messages').innerHTML = '<div class="msg msg-system">Start a conversation with the Agent Orchestrator. Select a presentation session, then describe what you want to do.</div>';
+      $('chat-input').placeholder = 'Describe what you want to do with your slides...';
+    }
+
+    async function chatSend() {
+      const input = $('chat-input');
+      const text = input.value.trim();
+      if (!text || S.chat.busy) return;
+      input.value = '';
+
+      // Determine action based on current state
+      if (!S.chat.taskId) {
+        // No active task -> start a new one
+        await chatStart(text);
+      } else if (S.chat.state === 'clarifying') {
+        // Answering questions with free text
+        addChatMsg('user', escHtml(text));
+        await chatRespondFreeText(text);
+      } else if (S.chat.state === 'ready') {
+        // User typed something while plan is ready - treat as feedback, restart
+        addChatMsg('user', escHtml(text));
+        addChatMsg('system', 'Starting a new task with your updated request...');
+        await chatStart(text);
+      } else {
+        addChatMsg('user', escHtml(text));
+        addChatMsg('system', `Agent is in "${S.chat.state}" state. Use the action buttons or start a new chat.`);
+      }
+    }
+
+    async function chatStart(query) {
+      if (!S.pid) {
+        addChatMsg('system', 'Please select or create a presentation session first.');
+        return;
+      }
+      addChatMsg('user', escHtml(query));
+      chatSetBusy(true);
+      const thinking = addChatMsg('bot', '<div class="msg-label">Agent</div><span class="spinner"></span> Analyzing your request...');
+
+      try {
+        const result = await apiCall('pptx_agent_start', { presentation_id: S.pid, query });
+        S.chat.taskId = result.task_id;
+        S.chat.questions = [];
+        S.chat.answers = {};
+        setChatState(result.state);
+        thinking.remove();
+
+        if (result.state === 'clarifying' && result.questions?.length) {
+          renderQuestions(result);
+        } else if (result.state === 'ready') {
+          // Plan generated directly (skip_questions or no questions)
+          addChatMsg('bot', '<div class="msg-label">Agent</div>' + renderAnalysis(result));
+          await chatFetchPlan();
+        } else {
+          addChatMsg('bot', '<div class="msg-label">Agent</div>' + renderAnalysis(result));
+        }
+      } catch (err) {
+        thinking.remove();
+        addChatMsg('bot', `<div class="msg-label">Agent</div><span style="color:var(--red)">Error: ${escHtml(err.message)}</span>`);
+        setChatState('failed');
+      } finally {
+        chatSetBusy(false);
+      }
+    }
+
+    function renderAnalysis(result) {
+      let html = '';
+      if (result.analysis?.plan_preview) html += `<p>${escHtml(result.analysis.plan_preview)}</p>`;
+      if (result.estimated_steps) html += `<p style="color:var(--text-2)">Estimated steps: ${result.estimated_steps}</p>`;
+      return html || '<p>Analysis complete.</p>';
+    }
+
+    function renderQuestions(result) {
+      let html = '<div class="msg-label">Agent</div>';
+      if (result.analysis?.plan_preview) html += `<p style="margin-bottom:8px">${escHtml(result.analysis.plan_preview)}</p>`;
+      html += '<p style="margin-bottom:8px">I have a few questions before creating the plan:</p>';
+
+      for (const q of result.questions) {
+        S.chat.questions.push(q);
+        html += `<div class="chat-question" data-qid="${q.question_id}">`;
+        html += `<div class="q-text">${escHtml(q.text)}</div>`;
+        if (q.choices?.length) {
+          for (const c of q.choices) {
+            html += `<button class="q-choice" onclick="chatSelectChoice('${q.question_id}', this, '${escHtml(c)}')">${escHtml(c)}</button>`;
+          }
+        }
+        html += '</div>';
+      }
+      html += '<div class="chat-actions">';
+      html += '<button class="chat-action chat-action-primary" onclick="chatSubmitAnswers()">Submit Answers</button>';
+      html += '<button class="chat-action chat-action-dim" onclick="chatSkipQuestions()">Skip Questions</button>';
+      html += '</div>';
+
+      addChatMsg('bot', html);
+      $('chat-input').placeholder = 'Type an answer or click the choices above...';
+    }
+
+    function chatSelectChoice(qid, btn, value) {
+      // Toggle selection
+      const parent = btn.closest('.chat-question');
+      parent.querySelectorAll('.q-choice').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      S.chat.answers[qid] = value;
+    }
+
+    async function chatSubmitAnswers() {
+      // Gather answers from choices and input
+      const answers = [];
+      for (const q of S.chat.questions) {
+        const ans = S.chat.answers[q.question_id];
+        if (ans) answers.push({ question_id: q.question_id, answer: ans });
+      }
+      if (answers.length === 0) {
+        addChatMsg('system', 'Please answer at least one question or click "Skip Questions".');
+        return;
+      }
+
+      addChatMsg('user', answers.map(a => `${a.question_id}: ${a.answer}`).join('\n'));
+      chatSetBusy(true);
+      const thinking = addChatMsg('bot', '<div class="msg-label">Agent</div><span class="spinner"></span> Processing answers...');
+
+      try {
+        const result = await apiCall('pptx_agent_respond', { task_id: S.chat.taskId, answers });
+        thinking.remove();
+        setChatState(result.state);
+
+        if (result.state === 'clarifying' && result.remaining_questions?.length) {
+          // More questions
+          S.chat.questions = []; S.chat.answers = {};
+          renderQuestions({ questions: result.remaining_questions, analysis: {} });
+        } else if (result.state === 'ready') {
+          renderPlan(result);
+        }
+      } catch (err) {
+        thinking.remove();
+        addChatMsg('bot', `<div class="msg-label">Agent</div><span style="color:var(--red)">Error: ${escHtml(err.message)}</span>`);
+      } finally {
+        chatSetBusy(false);
+      }
+    }
+
+    async function chatSkipQuestions() {
+      chatSetBusy(true);
+      addChatMsg('user', '(Skipping questions)');
+      const thinking = addChatMsg('bot', '<div class="msg-label">Agent</div><span class="spinner"></span> Generating plan...');
+
+      try {
+        // Submit empty answers to trigger plan generation
+        const fakeAnswers = S.chat.questions.map(q => ({ question_id: q.question_id, answer: 'No preference' }));
+        const result = await apiCall('pptx_agent_respond', { task_id: S.chat.taskId, answers: fakeAnswers });
+        thinking.remove();
+        setChatState(result.state);
+        if (result.state === 'ready') renderPlan(result);
+        else addChatMsg('bot', '<div class="msg-label">Agent</div><pre>' + escHtml(JSON.stringify(result, null, 2)) + '</pre>');
+      } catch (err) {
+        thinking.remove();
+        addChatMsg('bot', `<div class="msg-label">Agent</div><span style="color:var(--red)">Error: ${escHtml(err.message)}</span>`);
+      } finally {
+        chatSetBusy(false);
+      }
+    }
+
+    async function chatRespondFreeText(text) {
+      // Use the free text as answer to all unanswered questions
+      const answers = S.chat.questions
+        .filter(q => !S.chat.answers[q.question_id])
+        .map(q => ({ question_id: q.question_id, answer: text }));
+
+      if (answers.length === 0) {
+        addChatMsg('system', 'All questions already answered. Click "Submit Answers".');
+        return;
+      }
+
+      chatSetBusy(true);
+      const thinking = addChatMsg('bot', '<div class="msg-label">Agent</div><span class="spinner"></span> Processing...');
+
+      try {
+        const result = await apiCall('pptx_agent_respond', { task_id: S.chat.taskId, answers });
+        thinking.remove();
+        setChatState(result.state);
+        if (result.state === 'clarifying' && result.remaining_questions?.length) {
+          S.chat.questions = []; S.chat.answers = {};
+          renderQuestions({ questions: result.remaining_questions, analysis: {} });
+        } else if (result.state === 'ready') {
+          renderPlan(result);
+        }
+      } catch (err) {
+        thinking.remove();
+        addChatMsg('bot', `<div class="msg-label">Agent</div><span style="color:var(--red)">Error: ${escHtml(err.message)}</span>`);
+      } finally {
+        chatSetBusy(false);
+      }
+    }
+
+    async function chatFetchPlan() {
+      // Called when state became 'ready' without going through respond
+      chatSetBusy(true);
+      const thinking = addChatMsg('bot', '<div class="msg-label">Agent</div><span class="spinner"></span> Generating plan...');
+      try {
+        const result = await apiCall('pptx_agent_status', { task_id: S.chat.taskId });
+        thinking.remove();
+        setChatState(result.state);
+        // Show a simple "ready" message with execute button
+        let html = '<div class="msg-label">Agent</div>';
+        html += '<p>Plan is ready for execution.</p>';
+        html += renderActionButtons();
+        addChatMsg('bot', html);
+      } catch (err) {
+        thinking.remove();
+        addChatMsg('bot', `<div class="msg-label">Agent</div><span style="color:var(--red)">Error: ${escHtml(err.message)}</span>`);
+      } finally {
+        chatSetBusy(false);
+      }
+    }
+
+    function renderPlan(result) {
+      let html = '<div class="msg-label">Agent</div>';
+      html += '<h4>Execution Plan</h4>';
+      if (result.plan_preview) html += `<p style="margin-bottom:8px">${escHtml(result.plan_preview)}</p>`;
+      if (result.steps?.length) {
+        html += '<div class="step-list">';
+        for (let i = 0; i < result.steps.length; i++) {
+          const s = result.steps[i];
+          html += `<div class="step-item"><span class="step-icon step-pending">${i + 1}</span><span>${escHtml(s.description)}</span><span style="color:var(--text-2); font-size:11px">(${s.tool_name})</span></div>`;
+        }
+        html += '</div>';
+      }
+      html += `<p style="color:var(--text-2); font-size:11px; margin-top:4px">${result.step_count || result.steps?.length || '?'} steps total</p>`;
+      html += renderActionButtons();
+      addChatMsg('bot', html);
+      $('chat-input').placeholder = 'Type feedback or use the buttons above...';
+    }
+
+    function renderActionButtons() {
+      let html = '<div class="chat-actions">';
+      html += '<button class="chat-action chat-action-primary" onclick="chatExecute()">Execute Plan</button>';
+      html += '<button class="chat-action chat-action-danger" onclick="chatCancel()">Cancel</button>';
+      html += '</div>';
+      return html;
+    }
+
+    async function chatExecute() {
+      if (!S.chat.taskId) return;
+      chatSetBusy(true);
+      // Disable all action buttons
+      document.querySelectorAll('.chat-action').forEach(b => b.disabled = true);
+      const thinking = addChatMsg('bot', '<div class="msg-label">Agent</div><span class="spinner"></span> Executing plan...');
+
+      try {
+        const result = await apiCall('pptx_agent_execute', { task_id: S.chat.taskId, confirm: true });
+        thinking.remove();
+        setChatState(result.state);
+
+        let html = '<div class="msg-label">Agent</div>';
+        if (result.state === 'complete') {
+          html += '<h4 style="color:var(--green)">Execution Complete</h4>';
+          if (result.summary) html += `<p>${escHtml(result.summary)}</p>`;
+          html += `<p style="color:var(--text-2)">${result.steps_executed}/${result.steps_total} steps executed</p>`;
+        } else if (result.state === 'failed') {
+          html += '<h4 style="color:var(--red)">Execution Failed</h4>';
+          if (result.error) html += `<p style="color:var(--red)">${escHtml(result.error)}</p>`;
+          html += `<p style="color:var(--text-2)">${result.steps_executed}/${result.steps_total} steps completed before failure</p>`;
+        }
+
+        // Show execution log
+        if (result.execution_log?.length) {
+          html += '<div class="step-list">';
+          for (let i = 0; i < result.execution_log.length; i++) {
+            const s = result.execution_log[i];
+            const iconClass = s.status === 'done' ? 'step-done' : s.status === 'failed' ? 'step-failed' : 'step-pending';
+            const icon = s.status === 'done' ? '\u2713' : s.status === 'failed' ? '\u2717' : (i + 1);
+            html += `<div class="step-item"><span class="step-icon ${iconClass}">${icon}</span><span>${escHtml(s.description)}</span>`;
+            if (s.error) html += `<span style="color:var(--red); font-size:11px">${escHtml(s.error)}</span>`;
+            html += '</div>';
+          }
+          html += '</div>';
+        }
+
+        // Verification results
+        if (result.verification) {
+          html += '<h4>Verification</h4><pre>' + escHtml(JSON.stringify(result.verification, null, 2)) + '</pre>';
+        }
+
+        // Action buttons
+        html += '<div class="chat-actions">';
+        if (result.rollback_available) {
+          html += '<button class="chat-action chat-action-danger" onclick="chatRollback()">Rollback</button>';
+        }
+        html += '<button class="chat-action chat-action-dim" onclick="chatReset()">New Chat</button>';
+        html += '</div>';
+
+        addChatMsg('bot', html);
+      } catch (err) {
+        thinking.remove();
+        addChatMsg('bot', `<div class="msg-label">Agent</div><span style="color:var(--red)">Execution error: ${escHtml(err.message)}</span>`);
+      } finally {
+        chatSetBusy(false);
+      }
+    }
+
+    async function chatRollback() {
+      if (!S.chat.taskId) return;
+      chatSetBusy(true);
+      document.querySelectorAll('.chat-action').forEach(b => b.disabled = true);
+
+      try {
+        const result = await apiCall('pptx_agent_rollback', { task_id: S.chat.taskId });
+        setChatState(result.state);
+        addChatMsg('bot', `<div class="msg-label">Agent</div><p style="color:var(--yellow)">${escHtml(result.message)}</p>` + renderActionButtons());
+      } catch (err) {
+        addChatMsg('bot', `<div class="msg-label">Agent</div><span style="color:var(--red)">Rollback error: ${escHtml(err.message)}</span>`);
+      } finally {
+        chatSetBusy(false);
+      }
+    }
+
+    async function chatCancel() {
+      if (!S.chat.taskId) return;
+      chatSetBusy(true);
+      document.querySelectorAll('.chat-action').forEach(b => b.disabled = true);
+
+      try {
+        await apiCall('pptx_agent_cancel', { task_id: S.chat.taskId });
+        setChatState('cancelled');
+        addChatMsg('system', 'Task cancelled.');
+        S.chat.taskId = null;
+      } catch (err) {
+        addChatMsg('bot', `<div class="msg-label">Agent</div><span style="color:var(--red)">Cancel error: ${escHtml(err.message)}</span>`);
+      } finally {
+        chatSetBusy(false);
+      }
+    }
+  </script>
+</body>
+
+</html>
