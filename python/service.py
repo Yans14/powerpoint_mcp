@@ -74,8 +74,8 @@ class PowerPointService:
                     config=config,
                     method_map=core_map,
                 )
-            except BridgeError:
-                pass  # LLM package not installed; agent tools disabled
+            except (BridgeError, ImportError):
+                pass  # LLM package or dependency not installed; agent tools disabled
 
     def dispatch(self, method: str, params: dict[str, Any]) -> Any:
         method_name = self.method_map.get(method)
