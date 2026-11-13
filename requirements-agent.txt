@@ -1,0 +1,5 @@
+# Embedded LLM agent (pptx_agent_* tools), off unless PPTX_ENABLE_AGENT=1.
+# Install the SDK of the provider you use; both are listed for convenience.
+-r requirements.txt
+anthropic>=0.40.0
+openai>=1.50.0

@@ -1,150 +1,276 @@
-import { zodToJsonSchema } from "zod-to-json-schema";
+import { readFileSync } from "node:fs";
+
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import {
   CallToolRequestSchema,
+  ErrorCode,
+  GetPromptRequestSchema,
+  ListPromptsRequestSchema,
+  ListResourceTemplatesRequestSchema,
   ListResourcesRequestSchema,
   ListToolsRequestSchema,
+  McpError,
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { normalizeToolError, PythonBridgeClient } from "./bridge/client.js";
-import { readResource, listResources } from "./resources/index.js";
+import { BridgeErrorPayload } from "./bridge/types.js";
+import { getPrompt, listPrompts } from "./prompts/index.js";
+import { listResources, readResource, RESOURCE_TEMPLATES, ResourceNotFoundError } from "./resources/index.js";
+import { BATCH_TOOL_NAME, prepareBatch } from "./tools/batch.js";
 import { TOOL_DEFINITIONS, TOOL_MAP } from "./tools/catalog.js";
+import { OUTPUT_SCHEMAS, toOutputSchema } from "./tools/outputs.js";
+import { toInputSchema } from "./tools/schema.js";
+import {
+  acceptsIncludeState,
+  isAgentEnabled,
+  isToolInProfile,
+  parseToolProfile,
+  toolAnnotations,
+  ToolProfile,
+} from "./tools/traits.js";
 
-export function createMcpServer(bridge: PythonBridgeClient): Server {
+/** JSON-RPC error code the MCP specification assigns to an unknown resource. */
+const RESOURCE_NOT_FOUND = -32002;
+
+/** Tools whose success changes the set of open presentations, and so the resource listing. */
+const SESSION_LIFECYCLE_TOOLS = new Set([
+  "pptx_create_presentation",
+  "pptx_open_presentation",
+  "pptx_close_presentation",
+]);
+
+const PACKAGE_VERSION = (
+  JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string }
+).version;
+
+export { toInputSchema };
+
+export interface McpServerOptions {
+  /** Which tools to expose. Defaults to PPTX_TOOL_PROFILE, then "full". */
+  profile?: ToolProfile;
+  /** Expose the pptx_agent_* tools. Defaults to PPTX_ENABLE_AGENT. */
+  agentEnabled?: boolean;
+}
+
+/**
+ * Split a snapshot result into its metadata and its image payloads. Image bytes are returned as
+ * image blocks only: repeating them as base64 in the text block would double their token cost.
+ * Handles both response shapes: one slide (`snapshot_base64`) and several (`snapshots[]`).
+ */
+function splitSnapshotResult(result: unknown): { metadata: unknown; images: string[] } {
+  if (result === null || typeof result !== "object") {
+    return { metadata: result, images: [] };
+  }
+
+  const { snapshot_base64: single, snapshots, ...rest } = result as Record<string, unknown>;
+  const images: string[] = [];
+  const metadata: Record<string, unknown> = rest;
+
+  if (typeof single === "string") {
+    images.push(single);
+  }
+
+  if (Array.isArray(snapshots)) {
+    metadata.snapshots = snapshots.map((entry: Record<string, unknown>) => {
+      const { snapshot_base64: image, ...entryMetadata } = entry;
+      if (typeof image === "string") {
+        images.push(image);
+      }
+      return entryMetadata;
+    });
+  }
+
+  return { metadata, images };
+}
+
+function errorResult(payload: BridgeErrorPayload | Record<string, unknown>) {
+  return { isError: true, content: [{ type: "text", text: JSON.stringify(payload) }] };
+}
+
+/** Bridge failures while serving a resource become protocol errors, not resource contents. */
+function toResourceError(error: unknown, uri: string): McpError {
+  if (error instanceof ResourceNotFoundError) {
+    return new McpError(RESOURCE_NOT_FOUND, error.message, { uri });
+  }
+
+  const payload = normalizeToolError(error);
+  const code =
+    payload.code === "not_found" || payload.code === "session_lost"
+      ? RESOURCE_NOT_FOUND
+      : payload.code === "validation_error"
+        ? ErrorCode.InvalidParams
+        : ErrorCode.InternalError;
+  return new McpError(code, payload.message, { uri, ...payload });
+}
+
+export function createMcpServer(bridge: PythonBridgeClient, options: McpServerOptions = {}): Server {
+  const profile = options.profile ?? parseToolProfile(process.env.PPTX_TOOL_PROFILE);
+  const agentEnabled = options.agentEnabled ?? isAgentEnabled();
+  const isToolAvailable = (name: string): boolean => {
+    const definition = TOOL_MAP.get(name);
+    if (!definition || !isToolInProfile(name, profile)) {
+      return false;
+    }
+    return agentEnabled || definition.category !== "Agent";
+  };
+
   const server = new Server(
     {
       name: "powerpoint-mcp-server",
-      version: "0.1.0",
+      version: PACKAGE_VERSION,
     },
     {
       capabilities: {
         tools: {},
-        resources: {},
+        resources: { listChanged: true },
+        prompts: {},
       },
     },
   );
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => {
+  // Schemas never change at runtime; convert them once instead of on every tools/list.
+  const advertisedTools = TOOL_DEFINITIONS.filter((definition) => isToolAvailable(definition.name)).map((definition) => {
+    const annotations = toolAnnotations(definition);
+    const outputSchema = OUTPUT_SCHEMAS[definition.name];
     return {
-      tools: TOOL_DEFINITIONS.map((definition) => {
-        const schema = zodToJsonSchema(definition.schema as never, {
-          $refStrategy: "none",
-          target: "jsonSchema7",
-        }) as Record<string, unknown>;
-
-        delete schema.$schema;
-
-        return {
-          name: definition.name,
-          description: definition.description,
-          inputSchema: schema,
-          annotations: {
-            readOnlyHint: !definition.mutating,
-            destructiveHint: definition.name.includes("delete") || definition.name.includes("close"),
-          },
-        };
-      }),
+      name: definition.name,
+      // The display title travels in annotations.title only: clients fall back to it, and sending
+      // it twice per tool would be paid for in every tools/list.
+      description: definition.description,
+      inputSchema: toInputSchema(definition.schema, { includeState: acceptsIncludeState(definition) }),
+      ...(outputSchema ? { outputSchema: toOutputSchema(outputSchema) } : {}),
+      annotations,
     };
   });
+
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: advertisedTools }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const toolName = request.params.name;
     const definition = TOOL_MAP.get(toolName);
 
-    if (!definition) {
-      return {
-        isError: true,
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify({
-              code: "not_found",
-              message: `Unknown tool: ${toolName}`,
-            }),
-          },
-        ],
-      };
+    if (!definition || !isToolAvailable(toolName)) {
+      return errorResult({
+        code: "not_found",
+        message: `Unknown tool: ${toolName}`,
+        ...(definition
+          ? {
+              hint:
+                definition.category === "Agent" && !agentEnabled
+                  ? `${toolName} needs the embedded agent. Start the server with PPTX_ENABLE_AGENT=1 to use it.`
+                  : `${toolName} is not part of the "${profile}" tool profile. Start the server with PPTX_TOOL_PROFILE=full to use it.`,
+            }
+          : {}),
+      });
     }
 
-    const parseResult = definition.schema.safeParse(request.params.arguments ?? {});
+    let rawArguments: Record<string, unknown> = request.params.arguments ?? {};
+    let includeState: boolean | undefined;
+
+    if (acceptsIncludeState(definition) && "include_state" in rawArguments) {
+      const { include_state: requested, ...rest } = rawArguments;
+      if (typeof requested !== "boolean") {
+        return errorResult({
+          code: "validation_error",
+          message: `Invalid parameters for ${toolName}`,
+          details: { fieldErrors: { include_state: ["Expected a boolean."] } },
+        });
+      }
+      includeState = requested;
+      rawArguments = rest;
+    }
+
+    const parseResult = definition.schema.safeParse(rawArguments);
     if (!parseResult.success) {
-      return {
-        isError: true,
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify({
-              code: "validation_error",
-              message: `Invalid parameters for ${toolName}`,
-              details: parseResult.error.flatten(),
-            }),
-          },
-        ],
-      };
+      return errorResult({
+        code: "validation_error",
+        message: `Invalid parameters for ${toolName}`,
+        details: parseResult.error.flatten(),
+      });
+    }
+
+    let bridgeParams = parseResult.data as Record<string, unknown>;
+
+    if (toolName === BATCH_TOOL_NAME) {
+      const prepared = prepareBatch(bridgeParams as unknown as Parameters<typeof prepareBatch>[0], isToolAvailable);
+      if (!prepared.ok) {
+        return errorResult({
+          code: "validation_error",
+          message: `Invalid operations for ${toolName}. Nothing was executed.`,
+          details: { operations: prepared.problems },
+          ...(prepared.hint ? { hint: prepared.hint } : {}),
+        });
+      }
+      bridgeParams = prepared.params;
+    }
+
+    if (includeState !== undefined) {
+      bridgeParams = { ...bridgeParams, include_state: includeState };
     }
 
     try {
-      const result = await bridge.call(toolName, parseResult.data as Record<string, unknown>);
-      const content: Array<Record<string, unknown>> = [
-        {
-          type: "text",
-          text: JSON.stringify(result, null, 2),
-        },
-      ];
+      const result = await bridge.call(toolName, bridgeParams);
+      const { metadata, images } =
+        toolName === "pptx_get_slide_snapshot" ? splitSnapshotResult(result) : { metadata: result, images: [] };
 
-      if (toolName === "pptx_get_slide_snapshot" && typeof (result as { snapshot_base64?: unknown }).snapshot_base64 === "string") {
-        content.push({
-          type: "image",
-          data: (result as { snapshot_base64: string }).snapshot_base64,
-          mimeType: "image/jpeg",
-        });
+      // Compact JSON: the reader is a model, and indentation is paid for in tokens on every call.
+      const content: Array<Record<string, unknown>> = [{ type: "text", text: JSON.stringify(metadata) }];
+
+      // One image block per slide, in the order listed in the metadata.
+      for (const data of images) {
+        content.push({ type: "image", data, mimeType: "image/jpeg" });
       }
 
+      if (SESSION_LIFECYCLE_TOOLS.has(toolName)) {
+        // Best effort: a client that went away must not turn a successful call into a failure.
+        void server.sendResourceListChanged().catch(() => undefined);
+      }
+
+      if (toolName in OUTPUT_SCHEMAS) {
+        return { content, structuredContent: result as Record<string, unknown> };
+      }
       return { content };
     } catch (error) {
-      const payload = normalizeToolError(error);
-      return {
-        isError: true,
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(payload),
-          },
-        ],
-      };
+      return errorResult(normalizeToolError(error));
     }
   });
 
   server.setRequestHandler(ListResourcesRequestSchema, async () => {
-    const resources = await listResources(bridge);
-    return { resources };
+    try {
+      return { resources: await listResources(bridge) };
+    } catch (error) {
+      throw toResourceError(error, "pptx://presentations");
+    }
   });
 
+  server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => ({
+    resourceTemplates: RESOURCE_TEMPLATES,
+  }));
+
   server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    const { uri } = request.params;
     try {
-      const data = await readResource(request.params.uri, bridge);
-      return {
-        contents: [
-          {
-            uri: request.params.uri,
-            mimeType: "application/json",
-            text: JSON.stringify(data, null, 2),
-          },
-        ],
-      };
+      return { contents: [await readResource(uri, bridge)] };
     } catch (error) {
-      const payload = normalizeToolError(error);
-      return {
-        contents: [
-          {
-            uri: request.params.uri,
-            mimeType: "application/json",
-            text: JSON.stringify(payload),
-          },
-        ],
-      };
+      throw toResourceError(error, uri);
     }
+  });
+
+  server.setRequestHandler(ListPromptsRequestSchema, async () => ({ prompts: listPrompts(isToolAvailable) }));
+
+  server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+    const { name, arguments: promptArguments } = request.params;
+    let prompt;
+    try {
+      prompt = getPrompt(name, promptArguments ?? {}, isToolAvailable);
+    } catch (error) {
+      throw new McpError(ErrorCode.InvalidParams, error instanceof Error ? error.message : String(error));
+    }
+    if (!prompt) {
+      throw new McpError(ErrorCode.InvalidParams, `Unknown prompt: ${name}`);
+    }
+    return prompt;
   });
 
   return server;

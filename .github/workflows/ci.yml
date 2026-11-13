@@ -35,6 +35,9 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
+      - name: Check the generated Python tool catalog
+        run: npm run gen:catalog -- --check
+
       - name: Run TypeScript tests
         run: npm test
 

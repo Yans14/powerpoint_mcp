@@ -1,0 +1,3440 @@
+{
+  "$comment": "Generated from src/tools/catalog.ts by `npm run gen:catalog`. Do not edit by hand.",
+  "tools": [
+    {
+      "name": "pptx_get_engine_info",
+      "description": "Return active engine mode and runtime details.",
+      "category": "Session",
+      "mutating": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_create_presentation",
+      "description": "Create a new in-memory session backed by a temporary working copy. Original files are never modified until pptx_save_presentation.",
+      "category": "Session",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "width": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "template_path": {
+            "description": "Optional absolute .potx/.pptx template path to seed the presentation.",
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_open_presentation",
+      "description": "Open an existing .pptx into a safe temp working copy and return a new presentation_id.",
+      "category": "Session",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Absolute path to an existing .pptx file."
+          }
+        },
+        "required": [
+          "file_path"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_save_presentation",
+      "description": "Persist the current working copy to an explicit absolute output path.",
+      "category": "Session",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "output_path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Absolute path for saved .pptx output."
+          }
+        },
+        "required": [
+          "presentation_id",
+          "output_path"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_close_presentation",
+      "description": "Close a presentation session and release temporary resources.",
+      "category": "Session",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          }
+        },
+        "required": [
+          "presentation_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_list_open_presentations",
+      "description": "List all open presentation sessions and associated file paths.",
+      "category": "Session",
+      "mutating": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_get_presentation_state",
+      "description": "Return authoritative slide index, titles, layouts, and shape counts for the session.",
+      "category": "Session",
+      "mutating": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          }
+        },
+        "required": [
+          "presentation_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_get_layouts",
+      "description": "Discover available layout names and placeholder types. Always call this before pptx_add_slide and never guess layout names.",
+      "category": "Discovery",
+      "mutating": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          }
+        },
+        "required": [
+          "presentation_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_get_layout_detail",
+      "description": "Return full placeholder inventory for a named layout.",
+      "category": "Discovery",
+      "mutating": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "layout_name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Exact layout name returned by pptx_get_layouts. Case-sensitive."
+          }
+        },
+        "required": [
+          "presentation_id",
+          "layout_name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_get_masters",
+      "description": "List slide masters available in the presentation.",
+      "category": "Discovery",
+      "mutating": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          }
+        },
+        "required": [
+          "presentation_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_get_theme",
+      "description": "Return theme colors and major/minor font scheme.",
+      "category": "Discovery",
+      "mutating": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          }
+        },
+        "required": [
+          "presentation_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_get_slide",
+      "description": "Return complete slide shape tree, placeholders, and notes text.",
+      "category": "Slides",
+      "mutating": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_add_slide",
+      "description": "Add a slide by exact layout name. Layout names must come from pptx_get_layouts. Returns updated presentation_state.",
+      "category": "Slides",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "layout_name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Exact layout name returned by pptx_get_layouts. Never guess."
+          },
+          "position": {
+            "description": "Optional 1-based insertion position.",
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "presentation_id",
+          "layout_name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_duplicate_slide",
+      "description": "Duplicate an existing slide and optionally place it at a target position.",
+      "category": "Slides",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "source_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "target_position": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "presentation_id",
+          "source_index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_delete_slide",
+      "description": "Delete a slide by 1-based index. Indices above the deleted index will shift down in returned presentation_state.",
+      "category": "Slides",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_reorder_slides",
+      "description": "Reorder slides using the full desired order list of current indices, e.g. [2,1,3]. Length must equal current slide_count.",
+      "category": "Slides",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "new_order": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "required": [
+          "presentation_id",
+          "new_order"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_move_slide",
+      "description": "Move one slide from from_index to to_index.",
+      "category": "Slides",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "from_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "to_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          }
+        },
+        "required": [
+          "presentation_id",
+          "from_index",
+          "to_index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_set_slide_background",
+      "description": "Set slide background using solid color, image, or simple gradient fallback.",
+      "category": "Slides",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "color_hex": {
+            "type": "string",
+            "pattern": "^#?[0-9a-fA-F]{6}$",
+            "description": "Hex color string in RRGGBB or #RRGGBB format."
+          },
+          "image_path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "gradient_start_color_hex": {
+            "type": "string",
+            "pattern": "^#?[0-9a-fA-F]{6}$",
+            "description": "Hex color string in RRGGBB or #RRGGBB format."
+          },
+          "gradient_end_color_hex": {
+            "type": "string",
+            "pattern": "^#?[0-9a-fA-F]{6}$",
+            "description": "Hex color string in RRGGBB or #RRGGBB format."
+          },
+          "gradient_angle_deg": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 360
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_get_slide_snapshot",
+      "description": "Return JPEG previews for visual verification. Pass slide_index for one slide, or slide_indices to get several slides in one call. In OOXML mode this requires LibreOffice and pdftoppm.",
+      "category": "Slides",
+      "mutating": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "slide_indices": {
+            "description": "Several 1-based slide indices to render in one call, instead of slide_index.",
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+            }
+          },
+          "width_px": {
+            "type": "integer",
+            "minimum": 128,
+            "maximum": 4096
+          }
+        },
+        "required": [
+          "presentation_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_get_placeholders",
+      "description": "List placeholders with names, indices, types, and geometry for a slide.",
+      "category": "Placeholders",
+      "mutating": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_set_placeholder_text",
+      "description": "Primary text injection tool. Targets placeholders by exact name to preserve layout/master inheritance formatting.",
+      "category": "Placeholders",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "placeholder_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "text_content": {
+            "type": "string"
+          },
+          "alignment": {
+            "type": "string",
+            "enum": [
+              "left",
+              "center",
+              "right",
+              "justify"
+            ]
+          },
+          "font_name": {
+            "type": "string"
+          },
+          "font_size_pt": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "bold": {
+            "type": "boolean"
+          },
+          "italic": {
+            "type": "boolean"
+          },
+          "underline": {
+            "type": "boolean"
+          },
+          "color_hex": {
+            "type": "string",
+            "pattern": "^#?[0-9a-fA-F]{6}$",
+            "description": "Hex color string in RRGGBB or #RRGGBB format."
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index",
+          "placeholder_name",
+          "text_content"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_set_placeholder_image",
+      "description": "Populate a picture/content placeholder with an image from absolute local path.",
+      "category": "Placeholders",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "placeholder_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "image_path": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index",
+          "placeholder_name",
+          "image_path"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_clear_placeholder",
+      "description": "Clear content of a placeholder by name.",
+      "category": "Placeholders",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "placeholder_name": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index",
+          "placeholder_name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_get_placeholder_text",
+      "description": "Read structured text content and formatting from a placeholder.",
+      "category": "Placeholders",
+      "mutating": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "placeholder_name": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index",
+          "placeholder_name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_set_placeholder_rich_text",
+      "description": "Write multi-paragraph rich text with per-run formatting into a placeholder. Use this instead of pptx_set_placeholder_text when you need multiple paragraphs, bullet levels, or mixed formatting within the same placeholder.",
+      "category": "Placeholders",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "placeholder_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "paragraphs": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "description": "Plain text shorthand (used when runs is omitted).",
+                  "type": "string"
+                },
+                "runs": {
+                  "description": "Rich runs with per-run formatting. If omitted, 'text' field is used as plain text.",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      },
+                      "bold": {
+                        "type": "boolean"
+                      },
+                      "italic": {
+                        "type": "boolean"
+                      },
+                      "underline": {
+                        "type": "boolean"
+                      },
+                      "font_name": {
+                        "type": "string"
+                      },
+                      "font_size_pt": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      "color_hex": {
+                        "type": "string",
+                        "pattern": "^#?[0-9a-fA-F]{6}$",
+                        "description": "Hex color string in RRGGBB or #RRGGBB format."
+                      }
+                    },
+                    "required": [
+                      "text"
+                    ]
+                  }
+                },
+                "alignment": {
+                  "type": "string",
+                  "enum": [
+                    "left",
+                    "center",
+                    "right",
+                    "justify"
+                  ]
+                },
+                "level": {
+                  "description": "Bullet indent level (0 = no indent).",
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 8
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index",
+          "placeholder_name",
+          "paragraphs"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_add_text_box",
+      "description": "Add a free-form text box shape at the specified position. Supports simple text or rich multi-paragraph content.",
+      "category": "Shapes",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "left": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "top": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "text_content": {
+            "description": "Simple text content (used when paragraphs is omitted).",
+            "type": "string"
+          },
+          "paragraphs": {
+            "description": "Rich paragraphs (overrides text_content if provided).",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "runs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      },
+                      "bold": {
+                        "type": "boolean"
+                      },
+                      "italic": {
+                        "type": "boolean"
+                      },
+                      "underline": {
+                        "type": "boolean"
+                      },
+                      "font_name": {
+                        "type": "string"
+                      },
+                      "font_size_pt": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      "color_hex": {
+                        "type": "string",
+                        "pattern": "^#?[0-9a-fA-F]{6}$",
+                        "description": "Hex color string in RRGGBB or #RRGGBB format."
+                      }
+                    },
+                    "required": [
+                      "text"
+                    ]
+                  }
+                },
+                "alignment": {
+                  "type": "string",
+                  "enum": [
+                    "left",
+                    "center",
+                    "right",
+                    "justify"
+                  ]
+                }
+              }
+            }
+          },
+          "alignment": {
+            "type": "string",
+            "enum": [
+              "left",
+              "center",
+              "right",
+              "justify"
+            ]
+          },
+          "font_name": {
+            "type": "string"
+          },
+          "font_size_pt": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "bold": {
+            "type": "boolean"
+          },
+          "italic": {
+            "type": "boolean"
+          },
+          "underline": {
+            "type": "boolean"
+          },
+          "color_hex": {
+            "type": "string",
+            "pattern": "^#?[0-9a-fA-F]{6}$",
+            "description": "Hex color string in RRGGBB or #RRGGBB format."
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index",
+          "left",
+          "top",
+          "width",
+          "height"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_get_slide_text",
+      "description": "Extract ALL text from a slide — placeholders, text boxes, tables (every cell), and group shape children. Returns structured text items with shape info, content type, and full paragraph/run formatting. Essential for understanding slide content before transferring it.",
+      "category": "Slides",
+      "mutating": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_get_shape_details",
+      "description": "Get detailed info about any shape by name or ID — geometry, text with formatting, table content, picture info, or group children.",
+      "category": "Shapes",
+      "mutating": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "shape_name": {
+            "description": "Shape name (from pptx_get_slide or pptx_get_slide_text).",
+            "type": "string"
+          },
+          "shape_id": {
+            "description": "Shape ID (alternative to shape_name).",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_add_table",
+      "description": "Create a table shape with the specified rows, columns, and position. Optionally populate with initial data.",
+      "category": "Tables",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "rows": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "cols": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "left": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "top": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "data": {
+            "description": "Optional 2D array of cell text values [row][col].",
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index",
+          "rows",
+          "cols",
+          "left",
+          "top",
+          "width",
+          "height"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_get_table",
+      "description": "Read all cell content and formatting from a table shape.",
+      "category": "Tables",
+      "mutating": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "shape_name": {
+            "description": "Table shape name.",
+            "type": "string"
+          },
+          "shape_id": {
+            "description": "Table shape ID (alternative to shape_name).",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_set_table_cell",
+      "description": "Write text and formatting to a single table cell (0-based row/col).",
+      "category": "Tables",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "shape_name": {
+            "type": "string"
+          },
+          "shape_id": {
+            "type": "integer"
+          },
+          "row": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "col": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "text": {
+            "type": "string"
+          },
+          "bold": {
+            "type": "boolean"
+          },
+          "italic": {
+            "type": "boolean"
+          },
+          "font_name": {
+            "type": "string"
+          },
+          "font_size_pt": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "color_hex": {
+            "type": "string",
+            "pattern": "^#?[0-9a-fA-F]{6}$",
+            "description": "Hex color string in RRGGBB or #RRGGBB format."
+          },
+          "fill_hex": {
+            "description": "Cell background fill color.",
+            "type": "string",
+            "pattern": "^#?[0-9a-fA-F]{6}$"
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index",
+          "row",
+          "col",
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_set_table_data",
+      "description": "Batch-write entire table content in one call. Each cell can be a plain string or an object with text + formatting.",
+      "category": "Tables",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "shape_name": {
+            "type": "string"
+          },
+          "shape_id": {
+            "type": "integer"
+          },
+          "data": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      },
+                      "bold": {
+                        "type": "boolean"
+                      },
+                      "italic": {
+                        "type": "boolean"
+                      },
+                      "font_name": {
+                        "type": "string"
+                      },
+                      "font_size_pt": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      "color_hex": {
+                        "type": "string",
+                        "pattern": "^#?[0-9a-fA-F]{6}$",
+                        "description": "Hex color string in RRGGBB or #RRGGBB format."
+                      },
+                      "fill_hex": {
+                        "type": "string",
+                        "pattern": "^#?[0-9a-fA-F]{6}$",
+                        "description": "Hex color string in RRGGBB or #RRGGBB format."
+                      }
+                    },
+                    "required": [
+                      "text"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index",
+          "data"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_add_shape",
+      "description": "Add an auto-shape (rectangle, oval, arrow, etc.) at the specified position with optional fill, outline, and text.",
+      "category": "Shapes",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "shape_type": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Shape type: rectangle, rounded_rectangle, oval, diamond, triangle, right_arrow, left_arrow, up_arrow, down_arrow, pentagon, hexagon, chevron, star_5_point, line_inverse, cross, frame, rectangular_callout, rounded_rectangular_callout, cloud_callout, cloud."
+          },
+          "left": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "top": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "fill_hex": {
+            "type": "string",
+            "pattern": "^#?[0-9a-fA-F]{6}$",
+            "description": "Hex color string in RRGGBB or #RRGGBB format."
+          },
+          "line_hex": {
+            "type": "string",
+            "pattern": "^#?[0-9a-fA-F]{6}$",
+            "description": "Hex color string in RRGGBB or #RRGGBB format."
+          },
+          "text": {
+            "description": "Optional text content inside the shape.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index",
+          "shape_type",
+          "left",
+          "top",
+          "width",
+          "height"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_delete_shape",
+      "description": "Remove a shape from a slide by name or ID.",
+      "category": "Shapes",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "shape_name": {
+            "type": "string"
+          },
+          "shape_id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_set_slide_notes",
+      "description": "Write or replace the speaker notes text for a slide.",
+      "category": "Slides",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "notes_text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index",
+          "notes_text"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_set_shape_text",
+      "description": "Write rich text content on any non-placeholder shape (text boxes, auto-shapes). Supports multi-paragraph with per-run formatting.",
+      "category": "Shapes",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "shape_name": {
+            "type": "string"
+          },
+          "shape_id": {
+            "type": "integer"
+          },
+          "text_content": {
+            "description": "Simple text (used when paragraphs is omitted).",
+            "type": "string"
+          },
+          "paragraphs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "runs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      },
+                      "bold": {
+                        "type": "boolean"
+                      },
+                      "italic": {
+                        "type": "boolean"
+                      },
+                      "underline": {
+                        "type": "boolean"
+                      },
+                      "font_name": {
+                        "type": "string"
+                      },
+                      "font_size_pt": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      "color_hex": {
+                        "type": "string",
+                        "pattern": "^#?[0-9a-fA-F]{6}$",
+                        "description": "Hex color string in RRGGBB or #RRGGBB format."
+                      }
+                    },
+                    "required": [
+                      "text"
+                    ]
+                  }
+                },
+                "alignment": {
+                  "type": "string",
+                  "enum": [
+                    "left",
+                    "center",
+                    "right",
+                    "justify"
+                  ]
+                },
+                "level": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 8
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_get_slide_xml",
+      "description": "Return the raw OOXML content of a slide for debugging and inspection.",
+      "category": "Slides",
+      "mutating": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_set_shape_properties",
+      "description": "Modify the properties (position, size, rotation, fill, outline, name) of an existing shape.",
+      "category": "Shapes",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "shape_name": {
+            "type": "string"
+          },
+          "shape_id": {
+            "type": "integer"
+          },
+          "left": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "top": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "rotation": {
+            "description": "Rotation in degrees.",
+            "type": "number"
+          },
+          "fill_hex": {
+            "description": "Background fill color, or 'none' for transparent.",
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^#?[0-9a-fA-F]{6}$",
+                "description": "Hex color string in RRGGBB or #RRGGBB format."
+              },
+              {
+                "type": "string",
+                "const": "none"
+              }
+            ]
+          },
+          "line_hex": {
+            "description": "Outline color, or 'none' for no outline.",
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^#?[0-9a-fA-F]{6}$",
+                "description": "Hex color string in RRGGBB or #RRGGBB format."
+              },
+              {
+                "type": "string",
+                "const": "none"
+              }
+            ]
+          },
+          "line_width_pt": {
+            "description": "Outline width in points.",
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "name": {
+            "description": "New name for the shape.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_clone_shape",
+      "description": "Create an exact duplicate of a shape, optionally placing it on a different slide or with an offset.",
+      "category": "Shapes",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "shape_name": {
+            "type": "string"
+          },
+          "shape_id": {
+            "type": "integer"
+          },
+          "target_slide_index": {
+            "description": "Slide to place the clone on (defaults to same slide).",
+            "type": "integer",
+            "minimum": 1
+          },
+          "offset_left": {
+            "description": "Offset from original X position (e.g., '0.5in').",
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ]
+          },
+          "offset_top": {
+            "description": "Offset from original Y position (e.g., '0.5in').",
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ]
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_group_shapes",
+      "description": "Group multiple shapes together into a single group shape. The shapes must be on the same slide.",
+      "category": "Shapes",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "shape_names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "shape_ids": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "group_name": {
+            "description": "Name for the new group shape.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_ungroup_shapes",
+      "description": "Ungroup a group shape, replacing it with its individual child shapes.",
+      "category": "Shapes",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "shape_name": {
+            "type": "string"
+          },
+          "shape_id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_set_shape_z_order",
+      "description": "Change the visual layering (z-order) of a shape (front, back, forward, backward).",
+      "category": "Shapes",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "shape_name": {
+            "type": "string"
+          },
+          "shape_id": {
+            "type": "integer"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "front",
+              "back",
+              "forward",
+              "backward"
+            ],
+            "description": "front/back moves to extremes; forward/backward moves 1 level."
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index",
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_add_image",
+      "description": "Add a standalone image to a slide. Supports JPG, PNG, GIF, BMP, etc.",
+      "category": "Shapes",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "image_path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Absolute file path to the image."
+          },
+          "left": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "top": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index",
+          "image_path"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_add_line",
+      "description": "Add a freeform straight line/connector between two points.",
+      "category": "Shapes",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "begin_x": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "begin_y": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "end_x": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "end_y": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "color_hex": {
+            "type": "string",
+            "pattern": "^#?[0-9a-fA-F]{6}$",
+            "description": "Hex color string in RRGGBB or #RRGGBB format."
+          },
+          "width_pt": {
+            "description": "Line width in points.",
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "dash_style": {
+            "description": "E.g., 'dash', 'sysDash', 'sysDot', 'lgDash'.",
+            "type": "string"
+          },
+          "line_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index",
+          "begin_x",
+          "begin_y",
+          "end_x",
+          "end_y"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_find_replace_text",
+      "description": "Find and replace text case-sensitively or insensitively across entire presentation or specific slides. Scans text boxes, tables, and grouped shapes.",
+      "category": "Slides",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "find_text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "replace_text": {
+            "type": "string"
+          },
+          "case_sensitive": {
+            "description": "Defaults to true.",
+            "type": "boolean"
+          },
+          "slide_indices": {
+            "description": "Limit to specific slides. Defaults to all slides.",
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+            }
+          }
+        },
+        "required": [
+          "presentation_id",
+          "find_text",
+          "replace_text"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_add_chart",
+      "description": "Add a chart to a slide. For category-based charts (bar, column, line, pie, area) provide categories and series with values. For XY/scatter and bubble charts provide series with data_points.",
+      "category": "Charts",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "chart_type": {
+            "type": "string",
+            "enum": [
+              "column_clustered",
+              "column_stacked",
+              "column_stacked_100",
+              "bar_clustered",
+              "bar_stacked",
+              "bar_stacked_100",
+              "line",
+              "line_markers",
+              "line_stacked",
+              "pie",
+              "pie_exploded",
+              "doughnut",
+              "area",
+              "area_stacked",
+              "area_stacked_100",
+              "xy_scatter",
+              "xy_scatter_lines",
+              "xy_scatter_smooth",
+              "bubble",
+              "radar",
+              "stock_hlc",
+              "stock_ohlc",
+              "three_d_column",
+              "three_d_bar_clustered",
+              "three_d_pie",
+              "three_d_line"
+            ],
+            "description": "Chart type."
+          },
+          "left": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "top": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "categories": {
+            "description": "Category labels (for bar/column/line/pie/area charts).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "series": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "description": "Series display name.",
+                  "type": "string"
+                },
+                "values": {
+                  "description": "Data values (for category charts).",
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
+                },
+                "data_points": {
+                  "description": "Data points (for XY scatter or bubble charts).",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      },
+                      "size": {
+                        "description": "Bubble size (bubble charts only).",
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "has_legend": {
+            "type": "boolean"
+          },
+          "legend_position": {
+            "type": "string",
+            "enum": [
+              "bottom",
+              "corner",
+              "left",
+              "right",
+              "top"
+            ]
+          },
+          "has_data_labels": {
+            "type": "boolean"
+          },
+          "data_label_number_format": {
+            "description": "E.g., '0%', '#,##0', '0.0'.",
+            "type": "string"
+          },
+          "chart_style": {
+            "description": "Built-in chart style number.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 48
+          },
+          "title": {
+            "description": "Chart title text.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index",
+          "chart_type",
+          "series"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_get_chart_data",
+      "description": "Read the chart type, categories, series data, legend/label info, and title from an existing chart shape.",
+      "category": "Charts",
+      "mutating": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "shape_name": {
+            "type": "string"
+          },
+          "shape_id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_update_chart_data",
+      "description": "Replace the data behind an existing chart while preserving its visual formatting. Provide new categories (optional) and series.",
+      "category": "Charts",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "shape_name": {
+            "type": "string"
+          },
+          "shape_id": {
+            "type": "integer"
+          },
+          "categories": {
+            "description": "New category labels (keeps existing if omitted).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "series": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
+                },
+                "data_points": {
+                  "description": "For XY scatter or bubble charts.",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      },
+                      "size": {
+                        "description": "Bubble size (bubble charts only).",
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index",
+          "series"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_set_chart_style",
+      "description": "Modify chart visual properties: legend, data labels, title, and built-in style number.",
+      "category": "Charts",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "shape_name": {
+            "type": "string"
+          },
+          "shape_id": {
+            "type": "integer"
+          },
+          "has_legend": {
+            "type": "boolean"
+          },
+          "legend_position": {
+            "type": "string",
+            "enum": [
+              "bottom",
+              "corner",
+              "left",
+              "right",
+              "top"
+            ]
+          },
+          "legend_in_layout": {
+            "type": "boolean"
+          },
+          "has_data_labels": {
+            "type": "boolean"
+          },
+          "data_label_number_format": {
+            "type": "string"
+          },
+          "data_label_position": {
+            "type": "string",
+            "enum": [
+              "center",
+              "inside_end",
+              "outside_end",
+              "inside_base",
+              "above",
+              "below",
+              "left",
+              "right",
+              "best_fit"
+            ]
+          },
+          "chart_style": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 48
+          },
+          "title": {
+            "description": "Chart title. Set to null or '' to remove.",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_copy_shape_between_decks",
+      "description": "Copy a shape (including images, tables, charts) from one open presentation to another. Handles image relationship transfer automatically.",
+      "category": "Shapes",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source_presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "source_slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "shape_name": {
+            "type": "string"
+          },
+          "shape_id": {
+            "type": "integer"
+          },
+          "target_presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "target_slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "offset_left": {
+            "description": "Offset from original X position.",
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ]
+          },
+          "offset_top": {
+            "description": "Offset from original Y position.",
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ]
+          }
+        },
+        "required": [
+          "source_presentation_id",
+          "source_slide_index",
+          "target_presentation_id",
+          "target_slide_index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_get_slide_shapes",
+      "description": "Get a lightweight listing of all shapes on a slide: name, id, type, position, size, and flags (placeholder, text_frame, table, chart). Much faster than get_slide_text for shape discovery.",
+      "category": "Shapes",
+      "mutating": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_set_table_cell_merge",
+      "description": "Merge a rectangular range of cells in a table. Uses 0-based row/col indices. The merged cell retains the top-left cell's content.",
+      "category": "Tables",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "shape_name": {
+            "type": "string"
+          },
+          "shape_id": {
+            "type": "integer"
+          },
+          "start_row": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "start_col": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "end_row": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "end_col": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index",
+          "start_row",
+          "start_col",
+          "end_row",
+          "end_col"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_set_paragraph_spacing",
+      "description": "Control line spacing and spacing before/after paragraphs.",
+      "category": "Placeholders",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "shape_name": {
+            "type": "string"
+          },
+          "shape_id": {
+            "type": "integer"
+          },
+          "paragraph_index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "line_spacing": {
+            "description": "Line spacing in points (e.g., 14.0).",
+            "type": "number"
+          },
+          "space_before": {
+            "description": "Spacing before paragraph in points.",
+            "type": "number"
+          },
+          "space_after": {
+            "description": "Spacing after paragraph in points.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index",
+          "paragraph_index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_set_text_box_properties",
+      "description": "Control margins, word wrap, auto-fit, and vertical alignment for text frames.",
+      "category": "Shapes",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "shape_name": {
+            "type": "string"
+          },
+          "shape_id": {
+            "type": "integer"
+          },
+          "margin_left": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "margin_top": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "margin_right": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "margin_bottom": {
+            "anyOf": [
+              {
+                "type": "number",
+                "description": "Raw EMU integer (advanced use)."
+              },
+              {
+                "type": "string",
+                "pattern": "(?i)^\\d+(?:\\.\\d+)?(?:in|pt|cm|px)$"
+              }
+            ],
+            "description": "Human-friendly measurement converted internally to EMU."
+          },
+          "word_wrap": {
+            "type": "boolean"
+          },
+          "auto_size": {
+            "type": "string",
+            "enum": [
+              "none",
+              "shape_to_fit_text",
+              "text_to_fit_shape"
+            ]
+          },
+          "vertical_alignment": {
+            "type": "string",
+            "enum": [
+              "top",
+              "middle",
+              "bottom"
+            ]
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_set_table_style",
+      "description": "Apply table styles (banding, header rows) and optional style IDs.",
+      "category": "Tables",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "shape_name": {
+            "type": "string"
+          },
+          "shape_id": {
+            "type": "integer"
+          },
+          "first_row": {
+            "type": "boolean"
+          },
+          "last_row": {
+            "type": "boolean"
+          },
+          "first_col": {
+            "type": "boolean"
+          },
+          "last_col": {
+            "type": "boolean"
+          },
+          "banded_rows": {
+            "type": "boolean"
+          },
+          "banded_cols": {
+            "type": "boolean"
+          },
+          "style_id": {
+            "description": "Internal PPTX table style GUID if known.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_set_shape_fill_gradient",
+      "description": "Apply linear gradients to shape backgrounds. (Radial not natively supported by python-pptx write API).",
+      "category": "Shapes",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "shape_name": {
+            "type": "string"
+          },
+          "shape_id": {
+            "type": "integer"
+          },
+          "angle": {
+            "description": "Linear gradient angle in degrees (0-359). 0 is left-to-right.",
+            "type": "number"
+          },
+          "stops": {
+            "description": "Array of gradient stops.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "position": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Position from 0.0 to 1.0"
+                },
+                "color_hex": {
+                  "type": "string",
+                  "pattern": "^[0-9A-Fa-f]{6}$"
+                }
+              },
+              "required": [
+                "position",
+                "color_hex"
+              ]
+            }
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_add_connector",
+      "description": "Add a connecting line that explicitly snaps to other shapes.",
+      "category": "Slides",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+          },
+          "begin_shape_name": {
+            "type": "string"
+          },
+          "begin_shape_id": {
+            "type": "integer"
+          },
+          "begin_connection_site": {
+            "description": "Usually 0-3 for top/bottom/left/right defaults.",
+            "type": "integer"
+          },
+          "end_shape_name": {
+            "type": "string"
+          },
+          "end_shape_id": {
+            "type": "integer"
+          },
+          "end_connection_site": {
+            "description": "Usually 0-3 for top/bottom/left/right defaults.",
+            "type": "integer"
+          },
+          "connector_type": {
+            "default": "straight",
+            "type": "string",
+            "enum": [
+              "straight",
+              "elbow",
+              "curve"
+            ]
+          },
+          "color_hex": {
+            "type": "string",
+            "pattern": "^[0-9A-Fa-f]{6}$"
+          },
+          "width_pt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "presentation_id",
+          "slide_index"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_agent_start",
+      "description": "Start an AI agent task on a presentation with a natural language query. Analyzes the presentation, generates clarifying questions, and returns a task_id. Requires LLM configuration via environment variables (PPTX_LLM_PROVIDER + ANTHROPIC_API_KEY or OPENAI_API_KEY).",
+      "category": "Agent",
+      "mutating": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Natural language description of the desired transformation, e.g. 'Convert from Acme Corp branding to my company template'."
+          },
+          "skip_questions": {
+            "description": "If true, skip clarifying questions and go straight to plan generation. Default false.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "presentation_id",
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_agent_respond",
+      "description": "Respond to the agent's clarifying questions to refine the execution plan. Call after pptx_agent_start returns state='clarifying'.",
+      "category": "Agent",
+      "mutating": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Task ID returned by pptx_agent_start."
+          },
+          "answers": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "question_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "question_id from the questions array."
+                },
+                "answer": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Answer text or letter choice (e.g. 'A', 'B', or full text)."
+                }
+              },
+              "required": [
+                "question_id",
+                "answer"
+              ]
+            }
+          }
+        },
+        "required": [
+          "task_id",
+          "answers"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_agent_execute",
+      "description": "Execute the approved agent plan step by step. Must set confirm=true. Creates a rollback snapshot automatically. Call pptx_agent_rollback to undo if needed.",
+      "category": "Agent",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "confirm": {
+            "type": "boolean",
+            "const": true,
+            "description": "Must be exactly true to proceed with execution."
+          }
+        },
+        "required": [
+          "task_id",
+          "confirm"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_agent_status",
+      "description": "Get current state, progress, and execution log of an agent task.",
+      "category": "Agent",
+      "mutating": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "task_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_agent_rollback",
+      "description": "Restore the presentation to its pre-execution state. Only valid after pptx_agent_execute has run.",
+      "category": "Agent",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "task_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_agent_cancel",
+      "description": "Cancel an agent task and release its resources (snapshot file, secondary presentations opened by the plan).",
+      "category": "Agent",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "task_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_check_positions",
+      "description": "Check all shapes for overlaps, out-of-bounds positions, and near-alignment. Returns per-issue details with severity.",
+      "category": "Checkers",
+      "mutating": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_indices": {
+            "description": "Slides to check. Defaults to all slides.",
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+            }
+          },
+          "check_overlaps": {
+            "description": "Check for overlapping shapes. Default true.",
+            "type": "boolean"
+          },
+          "check_bounds": {
+            "description": "Check for shapes extending outside slide edges. Default true.",
+            "type": "boolean"
+          },
+          "check_alignment": {
+            "description": "Flag shapes that are 'almost' aligned (within tolerance). Default false.",
+            "type": "boolean"
+          },
+          "tolerance_px": {
+            "description": "Pixel tolerance for overlap and alignment checks. Default 5.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "presentation_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_check_visual_consistency",
+      "description": "Audit font families, font sizes, and colors across all slides for visual inconsistencies.",
+      "category": "Checkers",
+      "mutating": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "slide_indices": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+            }
+          },
+          "check_fonts": {
+            "description": "Check font family consistency. Default true.",
+            "type": "boolean"
+          },
+          "check_colors": {
+            "description": "Check color consistency and off-brand colors. Default true.",
+            "type": "boolean"
+          },
+          "check_sizes": {
+            "description": "Check for unusual font size outliers. Default true.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "presentation_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_check_content",
+      "description": "Find empty placeholders, default/template placeholder text, and slides missing expected content types.",
+      "category": "Checkers",
+      "mutating": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "check_empty_placeholders": {
+            "description": "Flag placeholders with no text or image. Default true.",
+            "type": "boolean"
+          },
+          "check_default_text": {
+            "description": "Flag placeholders still containing default template text like 'Click to add title'. Default true.",
+            "type": "boolean"
+          },
+          "slide_indices": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "1-based slide index. Verify current indices with pptx_get_presentation_state before mutating operations."
+            }
+          }
+        },
+        "required": [
+          "presentation_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_check_template_conformance",
+      "description": "Compare a presentation against a reference template, checking theme colors, font schemes, and layout usage. Returns a conformance_score from 0.0 to 1.0.",
+      "category": "Checkers",
+      "mutating": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "template_path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Absolute path to .pptx or .potx reference template."
+          },
+          "check_theme": {
+            "description": "Compare theme color schemes. Default true.",
+            "type": "boolean"
+          },
+          "check_fonts": {
+            "description": "Compare major/minor font schemes. Default true.",
+            "type": "boolean"
+          },
+          "check_layouts": {
+            "description": "Check that slide layouts exist in the template. Default true.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "presentation_id",
+          "template_path"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_diff_presentations",
+      "description": "Generate a structured before/after diff between two open presentations. Compares slide counts, added/removed slides, and per-shape text changes on modified slides.",
+      "category": "Checkers",
+      "mutating": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id_a": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The 'before' presentation ID."
+          },
+          "presentation_id_b": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The 'after' presentation ID."
+          },
+          "deep_diff": {
+            "description": "If true, include per-shape text content changes. Default true.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "presentation_id_a",
+          "presentation_id_b"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_create_checkpoint",
+      "description": "Remember the presentation's current content so it can be restored later with pptx_restore_checkpoint. Use before a risky series of edits. Up to 10 checkpoints are kept per presentation; they disappear when the presentation is closed. OOXML engine only.",
+      "category": "Session",
+      "mutating": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "label": {
+            "description": "Free text to recognise the checkpoint later.",
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "presentation_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_restore_checkpoint",
+      "description": "Return the presentation to a checkpoint made with pptx_create_checkpoint, discarding every edit made since. The checkpoint is kept and can be restored again. Does not touch files saved with pptx_save_presentation.",
+      "category": "Session",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "checkpoint_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "checkpoint_id returned by pptx_create_checkpoint."
+          }
+        },
+        "required": [
+          "presentation_id",
+          "checkpoint_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pptx_batch",
+      "description": "Run several operations on one presentation in a single call, in order. Use it to build or edit slides without one round trip per change. Each operation names a pptx_* tool and gives its arguments without presentation_id. All operations are validated before any runs. With atomic=true (default) a failing operation restores the presentation to its state before the batch (OOXML engine; the COM engine keeps the operations already applied and says so). Not allowed inside a batch: pptx_save_presentation, pptx_close_presentation, pptx_batch, pptx_agent_* and tools that do not take presentation_id.",
+      "category": "Session",
+      "mutating": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "presentation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Presentation session UUID returned by pptx_create_presentation or pptx_open_presentation."
+          },
+          "operations": {
+            "minItems": 1,
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "tool": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Name of the tool to run, e.g. pptx_add_slide."
+                },
+                "arguments": {
+                  "description": "Arguments for that tool, without presentation_id.",
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                }
+              },
+              "required": [
+                "tool"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "atomic": {
+            "description": "Undo the whole batch if an operation fails. Default true.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "presentation_id",
+          "operations"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

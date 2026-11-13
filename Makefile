@@ -11,7 +11,7 @@ PYTHONPATH_VALUE ?= python
 COM_SMOKE_OUTPUT_DIR ?= artifacts/com-smoke
 SNAPSHOT_WIDTH_PX ?= 1280
 
-.PHONY: help install install-node install-py mcp mcp-start build start test test-py lint-py format-py format-check-py check precommit-install precommit-run com-smoke com-smoke-ooxml clean
+.PHONY: help install install-node install-py install-ui install-agent gen-catalog mcp mcp-start build start test test-py lint-py format-py format-check-py check precommit-install precommit-run com-smoke com-smoke-ooxml clean
 
 help: ## Show available make targets
 	@awk 'BEGIN {FS = ":.*##"; print "Available targets:"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -21,6 +21,15 @@ install-node: ## Install Node.js dependencies
 
 install-py: ## Install Python runtime and development dependencies
 	$(PIP) install -r requirements.txt -r requirements-dev.txt
+
+install-ui: ## Install the web test console's dependencies
+	$(PIP) install -r requirements-ui.txt
+
+install-agent: ## Install the embedded LLM agent's dependencies
+	$(PIP) install -r requirements-agent.txt
+
+gen-catalog: ## Regenerate python/generated/tool_catalog.json from src/tools/catalog.ts
+	$(NPM) run gen:catalog
 
 install: install-node install-py ## Install all project dependencies
 

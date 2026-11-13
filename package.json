@@ -11,19 +11,19 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
-    "check": "npm run build && npm test && npm run lint:py && npm run format:check:py && npm run test:py",
+    "check": "npm run build && npm run gen:catalog -- --check && npm test && npm run lint:py && npm run format:check:py && npm run test:py",
     "lint:py": "ruff check python",
     "format:py": "black python",
     "format:check:py": "black --check python",
     "precommit:install": "pre-commit install --install-hooks",
     "precommit:run": "pre-commit run --all-files",
     "test": "vitest run",
-    "test:py": "PYTHONPATH=python pytest -q python/tests"
+    "test:py": "PYTHONPATH=python pytest -q python/tests",
+    "gen:catalog": "tsx scripts/generate-tool-catalog.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.10.2",
-    "zod": "^4.3.6",
-    "zod-to-json-schema": "^3.24.1"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^25.3.5",

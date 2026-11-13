@@ -21,9 +21,9 @@ Only implemented tools are registered.
 ## Runtime Targets
 
 - Node.js `>=22`
-- Python `>=3.12`
+- Python `>=3.11`
 
-Note: local development can run with compatible lower patch/minor versions, but Node 22/Python 3.12 are the declared baseline.
+CI runs Node 22 and Python 3.12.
 
 ## Install
 
@@ -32,6 +32,13 @@ npm install
 python3 -m pip install -r requirements.txt -r requirements-dev.txt
 pre-commit install --install-hooks
 ```
+
+Optional extras:
+
+| File | For |
+| --- | --- |
+| `requirements-ui.txt` | Local web test console (`python/web_ui.py`) |
+| `requirements-agent.txt` | Embedded LLM agent (`pptx_agent_*` tools), also needs `PPTX_ENABLE_AGENT=1` |
 
 You can do the same with:
 
@@ -59,7 +66,7 @@ make mcp-start
 
 The repo includes a lightweight FastAPI + static HTML UI for interactive testing of tools, sessions, and logs.
 
-Run it from the project root:
+Install its dependencies with `python3 -m pip install -r requirements-ui.txt`, then run it from the project root:
 
 ```bash
 python3 -m uvicorn web_ui:app --app-dir python --host 127.0.0.1 --port 8000 --reload
@@ -80,7 +87,7 @@ What it exposes:
 Relevant files:
 
 - `python/web_ui.py` (FastAPI app + API routes + WebSocket log broadcast)
-- `python/tool_catalog.py` (UI-facing tool metadata/catalog shaping)
+- `python/tool_catalog.py` (tool metadata read from the generated catalog)
 - `web/index.html` (single-page test UI)
 
 ## Architecture
@@ -88,11 +95,18 @@ Relevant files:
 - `src/index.ts`: MCP stdio entrypoint
 - `src/server.ts`: MCP tool/resource registration and validation
 - `src/bridge/client.ts`: persistent Python subprocess client
-- `src/tools/catalog.ts`: flat zod schemas for all v1 tools
+- `src/tools/catalog.ts`: zod schemas for every tool, the single source of truth for the tool surface.
+  `npm run gen:catalog` exports it to `python/generated/tool_catalog.json`, which the Python side uses for
+  validation, routing (`pptx_<name>` → `engine.<name>`), the web UI forms and the agent's tool list.
+  Edit the TypeScript catalog, then regenerate; CI fails if the JSON is stale.
 - `python/bridge.py`: line-delimited JSON-RPC dispatcher
 - `python/service.py`: engine selection + method routing
-- `python/engines/ooxml_engine.py`: cross-platform implementation
-- `python/engines/com_engine.py`: Windows COM implementation
+- `python/engines/ooxml_engine.py`: cross-platform engine, assembled from per-domain mixins in
+  `python/engines/ooxml/` (session, discovery, slides, snapshot, text, shapes, tables, charts) on top of
+  `ooxml/core.py` (shared state and helpers)
+- `python/engines/com_engine.py`: Windows COM engine, same layout under `python/engines/com/`
+- `python/engines/base.py`: engine interface, plus `get_pptx` (read access used by checkers and the agent)
+  and checkpoint support
 - `python/com_worker.py`: STA-thread COM call isolation
 
 ## Implemented Tools
@@ -129,11 +143,56 @@ All mutating operations return `success` plus updated `presentation_state` (exce
 - Opened/created presentations are edited in a temporary working copy.
 - Original files are not modified until explicit `pptx_save_presentation`.
 - Sessions are in-memory and do not survive process restart.
+- In OOXML mode, edits stay in memory and the working copy is written only when something needs the file
+  (`pptx_save_presentation`, `pptx_get_theme`, snapshots, agent rollback). Unsaved edits are lost if the bridge dies.
+- Working files live in `<tmp>/pptx-mcp/bridge-<pid>-*/` and are removed on shutdown; leftovers from a
+  killed process are removed the next time the server starts.
+
+## Failure handling
+
+- A bridge call that exceeds its time budget returns `timeout`; the Python bridge is stopped and restarted on the next call.
+- After a bridge restart or crash, calls using a presentation id from the previous process return `session_lost`:
+  reopen the file and use the new id.
+- A missing Python interpreter is reported as `dependency_missing` at startup.
+
+## Environment variables
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PPTX_PYTHON_BIN` | `python3` | Python interpreter used to run the bridge |
+| `PPTX_PY_BRIDGE` | bundled `python/bridge.py` | Alternative bridge script |
+| `PPTX_BRIDGE_TIMEOUT_MS` | `120000` | Time budget for one bridge call (`pptx_agent_*` tools get at least 600000) |
+| `PPTX_RENDER_TIMEOUT_SEC` | `90` | Time budget for rendering a snapshot request (LibreOffice + pdftoppm) |
+| `PPTX_LOG_LEVEL` | `INFO` | Bridge log level on stderr (`DEBUG`, `INFO`, `WARNING`, ...) |
+| `PPTX_WORKSPACE_DIR` | `<tmp>/pptx-mcp` | Root directory for session working files |
+| `PPTX_ENABLE_AGENT` | off | `1` exposes the `pptx_agent_*` tools (embedded LLM planner; needs `requirements-agent.txt` and an API key) |
+| `PPTX_LLM_MODEL` | `claude-sonnet-5-5` (Anthropic) | Model used by the embedded agent |
+| `PPTX_TOOL_PROFILE` | `full` | `core` exposes 31 essential tools instead of the full set (about half the tool-list size) |
+
+## MCP surface
+
+- **Tools** carry explicit annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`).
+  `pptx_save_presentation` is marked destructive: it overwrites `output_path`.
+- **Responses** are compact JSON. Mutating tools return `slide_count`; pass `include_state: true` to also get
+  the per-slide `presentation_state`.
+- **`pptx_batch`** runs up to 50 operations on one presentation in a single call. All operations are validated
+  first; with `atomic` (default) a failure restores the presentation (OOXML engine).
+  Saving, closing and agent tools are not allowed inside a batch.
+- **Checkpoints**: `pptx_create_checkpoint` / `pptx_restore_checkpoint` return a presentation to an earlier state
+  (OOXML engine, up to 10 per presentation, removed when it is closed).
+- **Errors** are `{code, message, details?, hint?}`. `hint` names the tool to call next
+  (for example `pptx_get_layouts` after an unknown layout).
+- **Structured output**: `pptx_list_open_presentations`, `pptx_get_presentation_state`, `pptx_get_layouts`,
+  `pptx_get_layout_detail` and `pptx_get_placeholders` declare an `outputSchema` and return `structuredContent`.
+- **Resources**: `pptx://presentations` lists open presentations; slides, layouts, masters, theme and
+  snapshots (`image/jpeg` blob) are resource templates under `pptx://presentations/{presentation_id}`.
+- **Prompts**: `create_deck_from_outline`, `apply_template_to_deck`.
 
 ## Snapshots
 
 - COM mode: native `Slide.Export`
-- OOXML mode: `soffice --headless` + `pdftoppm`
+- OOXML mode: `soffice --headless` + `pdftoppm`. The PDF conversion is cached until the presentation changes.
+- Pass `slide_indices` instead of `slide_index` to get up to 20 slides in one call.
 - If dependencies are missing in OOXML mode, snapshot returns `dependency_missing` with install hint.
 
 ## Test

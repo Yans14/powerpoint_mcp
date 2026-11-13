@@ -11,13 +11,8 @@ class CheckerService:
         self.engine = engine
 
     def _prs(self, presentation_id: str):
-        session = self.engine.sessions.get(presentation_id)
-        if not session:
-            raise BridgeError(
-                code="not_found",
-                message=f"Presentation '{presentation_id}' not found.",
-            )
-        return session.extra["prs"]
+        # Engine-agnostic: the COM engine exports a copy, the OOXML engine shares its live object.
+        return self.engine.get_pptx(presentation_id)
 
     def dispatch(self, method: str, params: dict[str, Any]) -> Any:
         handlers = {

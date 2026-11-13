@@ -4,12 +4,19 @@ export type BridgeErrorCode =
   | "engine_error"
   | "dependency_missing"
   | "conflict"
-  | "internal_error";
+  | "internal_error"
+  // A call exceeded its time budget (bridge call in the client, or slide rendering in the bridge).
+  | "timeout"
+  // Raised by the TypeScript client only:
+  | "session_lost"
+  | "bridge_unavailable";
 
 export interface BridgeErrorPayload {
   code: BridgeErrorCode;
   message: string;
   details?: Record<string, unknown>;
+  /** One sentence telling the caller what to do next. */
+  hint?: string;
 }
 
 export interface BridgeRequest<TParams = Record<string, unknown>> {
@@ -48,18 +55,22 @@ export interface PresentationState {
 export interface MutatingResponseEnvelope {
   success: true;
   warning?: string;
-  presentation_state: PresentationState;
+  /** Always present; replaces presentation_state unless the call passed include_state: true. */
+  slide_count: number;
+  presentation_state?: PresentationState;
   [key: string]: unknown;
 }
 
 export class BridgeClientError extends Error {
   public readonly code: BridgeErrorCode;
   public readonly details?: Record<string, unknown>;
+  public readonly hint?: string;
 
   public constructor(payload: BridgeErrorPayload) {
     super(payload.message);
     this.name = "BridgeClientError";
     this.code = payload.code;
     this.details = payload.details;
+    this.hint = payload.hint;
   }
 }

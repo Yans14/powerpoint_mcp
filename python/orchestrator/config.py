@@ -3,6 +3,17 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+DEFAULT_MODELS = {"anthropic": "claude-sonnet-5-5", "openai": "gpt-4o"}
+
+
+def agent_enabled() -> bool:
+    """The embedded LLM agent is opt-in.
+
+    An MCP client is already driven by a model, so planning with a second one doubles cost and
+    latency. Merely having an API key in the environment must not switch it on.
+    """
+    return os.getenv("PPTX_ENABLE_AGENT", "").strip().lower() in {"1", "true", "yes", "on"}
+
 
 @dataclass
 class AgentConfig:
@@ -30,8 +41,7 @@ class AgentConfig:
         if not api_key:
             return None
 
-        default_models = {"anthropic": "claude-sonnet-4-20250514", "openai": "gpt-4o"}
-        model = os.getenv("PPTX_LLM_MODEL", default_models.get(provider, "claude-sonnet-4-20250514"))
+        model = os.getenv("PPTX_LLM_MODEL") or DEFAULT_MODELS.get(provider, DEFAULT_MODELS["anthropic"])
 
         azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT") if provider == "azure_openai" else None
         azure_api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-01") if provider == "azure_openai" else None

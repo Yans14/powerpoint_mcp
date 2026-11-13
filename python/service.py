@@ -2,21 +2,29 @@ from __future__ import annotations
 
 from typing import Any
 
+from batch import run_batch
 from checkers.checker_service import CheckerService
 from engine_selector import detect_engine
 from engines.base import BaseEngine
 from engines.com_engine import COMEngine
 from engines.ooxml_engine import OOXMLEngine
-from errors import BridgeError
-from handlers.agent import AGENT_METHODS
-from handlers.charts import CHART_METHODS
-from handlers.checkers import CHECKER_METHODS
-from handlers.discovery import DISCOVERY_METHODS
-from handlers.placeholders import PLACEHOLDER_METHODS
-from handlers.session import SESSION_METHODS
-from handlers.shapes import SHAPE_METHODS
-from handlers.slides import SLIDE_METHODS
-from handlers.tables import TABLE_METHODS
+from errors import BridgeError, suggest_hint
+from tool_catalog import BATCH_TOOL, TOOLS, engine_method_for, is_engine_tool
+from validation import validate_params
+
+# Tools an engine method serves directly; the agent's plans may only call these.
+_ENGINE_TOOL_MAP = {tool["name"]: engine_method_for(tool) for tool in TOOLS if is_engine_tool(tool)}
+
+
+def _without_full_state(result: Any) -> Any:
+    """Replace a result's ``presentation_state`` with just its ``slide_count``."""
+    if not isinstance(result, dict) or not isinstance(result.get("presentation_state"), dict):
+        return result
+
+    state = result["presentation_state"]
+    compact = {key: value for key, value in result.items() if key != "presentation_state"}
+    compact.setdefault("slide_count", state.get("slide_count"))
+    return compact
 
 
 class PowerPointService:
@@ -36,48 +44,66 @@ class PowerPointService:
         else:
             self.engine = OOXMLEngine(metadata)
 
+        # Derived from the generated catalog: every tool except pptx_batch, handled separately.
         self.method_map: dict[str, str] = {
-            **SESSION_METHODS,
-            **DISCOVERY_METHODS,
-            **SLIDE_METHODS,
-            **PLACEHOLDER_METHODS,
-            **SHAPE_METHODS,
-            **TABLE_METHODS,
-            **CHART_METHODS,
-            **AGENT_METHODS,
-            **CHECKER_METHODS,
+            tool["name"]: engine_method_for(tool) for tool in TOOLS if tool["name"] != BATCH_TOOL
         }
 
         # Checker service always available (no LLM needed)
         self.checker_service = CheckerService(engine=self.engine)
 
-        # Agent orchestrator is optional (requires LLM API key)
+        # The embedded LLM agent is opt-in (PPTX_ENABLE_AGENT=1) and needs the agent extra.
         self.orchestrator = None
-        from orchestrator.config import AgentConfig
+        self.agent_unavailable_reason = "The agent is disabled. Set PPTX_ENABLE_AGENT=1 to enable it."
+        from orchestrator.config import AgentConfig, agent_enabled
 
-        config = AgentConfig.from_env()
-        if config is not None:
-            try:
-                from orchestrator.agent import AgentOrchestrator
-
-                core_map = {
-                    **SESSION_METHODS,
-                    **DISCOVERY_METHODS,
-                    **SLIDE_METHODS,
-                    **PLACEHOLDER_METHODS,
-                    **SHAPE_METHODS,
-                    **TABLE_METHODS,
-                    **CHART_METHODS,
-                }
-                self.orchestrator = AgentOrchestrator(
-                    engine=self.engine,
-                    config=config,
-                    method_map=core_map,
+        if agent_enabled():
+            config = AgentConfig.from_env()
+            if config is None:
+                self.agent_unavailable_reason = (
+                    "PPTX_ENABLE_AGENT=1 is set but no API key was found. Set PPTX_LLM_API_KEY, or "
+                    "ANTHROPIC_API_KEY / OPENAI_API_KEY / AZURE_OPENAI_API_KEY for the chosen PPTX_LLM_PROVIDER."
                 )
-            except (BridgeError, ImportError):
-                pass  # LLM package or dependency not installed; agent tools disabled
+            else:
+                try:
+                    from orchestrator.agent import AgentOrchestrator
+
+                    self.orchestrator = AgentOrchestrator(
+                        engine=self.engine,
+                        config=config,
+                        method_map=dict(_ENGINE_TOOL_MAP),
+                    )
+                except (BridgeError, ImportError) as exc:
+                    self.agent_unavailable_reason = (
+                        f"The agent could not start ({exc}). Install its packages: "
+                        "pip install -r requirements-agent.txt"
+                    )
 
     def dispatch(self, method: str, params: dict[str, Any]) -> Any:
+        """Run one bridge method.
+
+        Mutating methods answer with a ``slide_count`` instead of the full ``presentation_state``
+        unless the caller passes ``include_state: true``: the per-slide listing repeated after
+        every edit is mostly noise on large decks.
+        """
+        include_state = False
+        if isinstance(params, dict) and "include_state" in params:
+            params = dict(params)
+            include_state = params.pop("include_state") is True
+
+        try:
+            result = self._dispatch(method, params)
+        except BridgeError as exc:
+            if exc.hint is None:
+                exc.hint = suggest_hint(exc)
+            raise
+
+        return result if include_state else _without_full_state(result)
+
+    def _dispatch(self, method: str, params: dict[str, Any]) -> Any:
+        if method == BATCH_TOOL:
+            return run_batch(self, validate_params(method, params))
+
         method_name = self.method_map.get(method)
         if not method_name:
             raise BridgeError(
@@ -86,16 +112,13 @@ class PowerPointService:
                 details={"method": method},
             )
 
+        # Callers other than the TypeScript layer (web UI, tests) do not pre-validate input.
+        params = validate_params(method, params)
+
         # Route agent methods
         if method_name == "agent_dispatch":
             if self.orchestrator is None:
-                raise BridgeError(
-                    code="dependency_missing",
-                    message=(
-                        "Agent orchestrator not configured. "
-                        "Set PPTX_LLM_PROVIDER and ANTHROPIC_API_KEY or OPENAI_API_KEY."
-                    ),
-                )
+                raise BridgeError(code="dependency_missing", message=self.agent_unavailable_reason)
             return self.orchestrator.dispatch(method, params)
 
         # Route checker methods

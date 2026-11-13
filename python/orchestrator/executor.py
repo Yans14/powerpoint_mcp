@@ -1,20 +1,34 @@
 from __future__ import annotations
 
+import time
 from datetime import UTC, datetime
 from typing import Any
 
 from engines.base import BaseEngine
 from errors import BridgeError
 from orchestrator.models import AgentTask, PlanStep, StepStatus
+from validation import validate_params
 
 
 class PlanExecutor:
-    def __init__(self, engine: BaseEngine, method_map: dict[str, str]) -> None:
+    def __init__(self, engine: BaseEngine, method_map: dict[str, str], timeout_sec: float | None = None) -> None:
         self.engine = engine
         self.method_map = method_map
+        self.timeout_sec = timeout_sec
 
     def execute(self, task: AgentTask, steps: list[PlanStep]) -> None:
+        started = time.monotonic()
         for step in steps:
+            # Checked between steps: a step already running is not interrupted.
+            if self.timeout_sec is not None and time.monotonic() - started > self.timeout_sec:
+                step.status = StepStatus.FAILED
+                step.error = "timeout: plan execution exceeded its time budget"
+                raise BridgeError(
+                    code="timeout",
+                    message=f"Plan execution exceeded {self.timeout_sec:g} s and was stopped before step {step.step_id}.",
+                    details={"timeout_sec": self.timeout_sec, "stopped_at_step": step.step_id},
+                    hint="Roll back with pptx_agent_rollback, or raise PPTX_AGENT_TIMEOUT.",
+                )
             step.status = StepStatus.RUNNING
             task.updated_at = datetime.now(UTC)
             try:
@@ -66,7 +80,8 @@ class PlanExecutor:
                 code="engine_error",
                 message=f"Engine method '{method_name}' not implemented.",
             )
-        return target(params)
+        # Plan steps come from an LLM and bypass the MCP layer's schema validation.
+        return target(validate_params(tool_name, params))
 
     def _update_context(
         self,
