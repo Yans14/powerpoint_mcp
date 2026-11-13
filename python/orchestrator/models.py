@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class AgentState(str, Enum):
+class AgentState(StrEnum):
     ANALYZING = "analyzing"
     PLANNING = "planning"
     CLARIFYING = "clarifying"
@@ -18,7 +18,7 @@ class AgentState(str, Enum):
     CANCELLED = "cancelled"
 
 
-class StepStatus(str, Enum):
+class StepStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     DONE = "done"
