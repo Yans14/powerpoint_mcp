@@ -8,12 +8,11 @@ pre-batch state when an operation fails, provided the engine supports it.
 from __future__ import annotations
 
 import logging
-import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from errors import BridgeError, ensure
-from tool_catalog import TOOL_CATALOG
+from tool_catalog import AGENT_CATEGORY, TOOLS_BY_NAME
 
 if TYPE_CHECKING:
     from service import PowerPointService
@@ -24,15 +23,14 @@ MAX_BATCH_OPERATIONS = 50
 
 # Saving and closing cannot be undone by restoring the working file, so they stay outside batches.
 _EXCLUDED_TOOLS = {"pptx_batch", "pptx_save_presentation", "pptx_close_presentation"}
-_TOOLS = {tool["name"]: tool for tool in TOOL_CATALOG}
 
 
 def is_batchable(tool_name: str) -> bool:
     """A tool can run in a batch if it acts on a single presentation and can be rolled back."""
-    spec = _TOOLS.get(tool_name)
-    if spec is None or tool_name in _EXCLUDED_TOOLS or tool_name.startswith("pptx_agent_"):
+    spec = TOOLS_BY_NAME.get(tool_name)
+    if spec is None or tool_name in _EXCLUDED_TOOLS or spec["category"] == AGENT_CATEGORY:
         return False
-    return any(param["name"] == "presentation_id" for param in spec["params"])
+    return "presentation_id" in spec["input_schema"].get("properties", {})
 
 
 def run_batch(service: PowerPointService, params: dict[str, Any]) -> dict[str, Any]:
@@ -52,14 +50,13 @@ def run_batch(service: PowerPointService, params: dict[str, Any]) -> dict[str, A
     service.dispatch("pptx_get_presentation_state", {"presentation_id": presentation_id})
     session = engine.sessions[presentation_id]
 
-    mutates = any(_TOOLS[tool]["mutating"] for tool, _ in calls)
+    mutates = any(TOOLS_BY_NAME[tool]["mutating"] for tool, _ in calls)
     restorable = atomic and mutates and engine.supports_rollback
     backup_path = Path(session.working_path + ".batch")
     was_dirty = session.dirty
 
     if restorable:
-        engine.flush_session(session)
-        shutil.copy2(session.working_path, backup_path)
+        engine.copy_working_file(session, backup_path)
 
     results: list[dict[str, Any]] = []
     try:
@@ -68,8 +65,7 @@ def run_batch(service: PowerPointService, params: dict[str, Any]) -> dict[str, A
                 results.append({"tool": tool, "result": service.dispatch(tool, arguments)})
             except Exception as exc:
                 if restorable:
-                    shutil.copy2(backup_path, session.working_path)
-                    engine.reload_session(session)
+                    engine.restore_working_file(session, backup_path)
                     session.dirty = was_dirty
                 raise _batch_failure(exc, index, tool, restorable, mutates) from exc
     finally:

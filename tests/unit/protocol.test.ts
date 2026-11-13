@@ -11,7 +11,14 @@ import { createMcpServer } from "../../src/server.js";
 import { prepareBatch } from "../../src/tools/batch.js";
 import { TOOL_DEFINITIONS, TOOL_MAP } from "../../src/tools/catalog.js";
 import { OUTPUT_SCHEMAS } from "../../src/tools/outputs.js";
-import { parseToolProfile, toolAnnotations, toolTitle, ToolProfile, TRAIT_SETS } from "../../src/tools/traits.js";
+import {
+  isAgentEnabled,
+  parseToolProfile,
+  toolAnnotations,
+  toolTitle,
+  ToolProfile,
+  TRAIT_SETS,
+} from "../../src/tools/traits.js";
 
 const PRESENTATION_ID = "00000000-0000-4000-8000-000000000000";
 const OTHER_ID = "11111111-1111-4111-8111-111111111111";
@@ -19,7 +26,11 @@ const OTHER_ID = "11111111-1111-4111-8111-111111111111";
 type BridgeCall = { method: string; params: Record<string, unknown> };
 type BridgeHandler = (method: string, params: Record<string, unknown>) => unknown;
 
-async function connect(handler: BridgeHandler = () => ({}), profile: ToolProfile = "full") {
+async function connect(
+  handler: BridgeHandler = () => ({}),
+  profile: ToolProfile = "full",
+  agentEnabled = true,
+) {
   const calls: BridgeCall[] = [];
   const bridge = {
     call: async (method: string, params: Record<string, unknown>) => {
@@ -29,7 +40,7 @@ async function connect(handler: BridgeHandler = () => ({}), profile: ToolProfile
   } as unknown as PythonBridgeClient;
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  await createMcpServer(bridge, { profile }).connect(serverTransport);
+  await createMcpServer(bridge, { profile, agentEnabled }).connect(serverTransport);
   const client = new Client({ name: "unit-test", version: "0.0.0" });
   await client.connect(clientTransport);
   return { client, calls };
@@ -118,6 +129,31 @@ describe("tool traits", () => {
         "title",
       ]);
     }
+  });
+});
+
+describe("embedded agent switch", () => {
+  it("hides the agent tools unless the agent is enabled", async () => {
+    const { client, calls } = await connect(() => ({}), "full", false);
+
+    const { tools } = await client.listTools();
+    const agentTools = TOOL_DEFINITIONS.filter((definition) => definition.category === "Agent");
+    expect(agentTools.length).toBeGreaterThan(0);
+    expect(tools).toHaveLength(TOOL_DEFINITIONS.length - agentTools.length);
+    expect(tools.some((tool) => tool.name.startsWith("pptx_agent_"))).toBe(false);
+
+    const hidden = await callTool(client, "pptx_agent_status", { task_id: "t" });
+    expect(hidden.data.code).toBe("not_found");
+    expect(hidden.data.hint).toContain("PPTX_ENABLE_AGENT=1");
+    expect(calls).toEqual([]);
+  });
+
+  it("reads the switch like the Python side does", () => {
+    expect(isAgentEnabled(undefined)).toBe(false);
+    expect(isAgentEnabled("")).toBe(false);
+    expect(isAgentEnabled("0")).toBe(false);
+    expect(isAgentEnabled("1")).toBe(true);
+    expect(isAgentEnabled(" True ")).toBe(true);
   });
 });
 

@@ -1,0 +1,5 @@
+# Local web test console (python/web_ui.py). Not needed by the MCP server.
+-r requirements.txt
+fastapi>=0.110.0
+uvicorn>=0.29.0
+websockets>=12.0

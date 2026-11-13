@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+import shutil
+import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from errors import ensure
+from errors import SESSION_NOT_FOUND_HINT, BridgeError, ensure
+
+if TYPE_CHECKING:
+    from pptx.presentation import Presentation
 
 MAX_SNAPSHOT_SLIDES = 20
+MAX_CHECKPOINTS_PER_SESSION = 10
 
 
 def snapshot_slide_indices(params: dict[str, Any]) -> tuple[list[int], bool]:
@@ -302,7 +308,19 @@ class BaseEngine(ABC):
     def shutdown(self) -> None:
         raise NotImplementedError
 
-    # --- Working-file synchronisation (used by rollback snapshots) ---
+    # --- Read access for checkers and the agent ---
+
+    @abstractmethod
+    def get_pptx(self, presentation_id: str) -> Presentation:
+        """A python-pptx ``Presentation`` reflecting the session's current content.
+
+        Checkers and the agent's verification read decks through this instead of reaching into
+        engine internals, so they work with every engine. Callers must treat it as read-only:
+        depending on the engine it is either the live object or a detached copy.
+        """
+        raise NotImplementedError
+
+    # --- Working-file synchronisation (used by checkpoints, batches and agent rollback) ---
 
     def flush_session(self, session: EngineSession) -> None:
         """Make ``session.working_path`` reflect every edit made so far.
@@ -314,3 +332,99 @@ class BaseEngine(ABC):
     def reload_session(self, session: EngineSession) -> None:
         """Pick up a working file that was replaced on disk, discarding in-memory state."""
         return None
+
+    def require_rollback_support(self) -> None:
+        if not self.supports_rollback:
+            raise BridgeError(
+                code="dependency_missing",
+                message=f"Checkpoints and rollback are not supported by the {self.name} engine.",
+                details={"engine": self.name},
+                hint="Save a copy with pptx_save_presentation before risky edits and reopen it to go back.",
+            )
+
+    def copy_working_file(self, session: EngineSession, destination: Path) -> None:
+        """Write the session's current content to ``destination``."""
+        self.require_rollback_support()
+        self.flush_session(session)
+        shutil.copy2(session.working_path, destination)
+
+    def restore_working_file(self, session: EngineSession, source: Path) -> None:
+        """Replace the session's content with a copy previously written by copy_working_file."""
+        self.require_rollback_support()
+        shutil.copy2(source, session.working_path)
+        self.reload_session(session)
+
+    # --- Checkpoint tools (pptx_create_checkpoint / pptx_restore_checkpoint) ---
+
+    def _session_for(self, params: dict[str, Any]) -> EngineSession:
+        presentation_id = str(params["presentation_id"])
+        session = self.sessions.get(presentation_id)
+        if session is None:
+            raise BridgeError(
+                code="not_found",
+                message="Presentation session not found.",
+                details={"presentation_id": presentation_id},
+                hint=SESSION_NOT_FOUND_HINT,
+            )
+        return session
+
+    def create_checkpoint(self, params: dict[str, Any]) -> dict[str, Any]:
+        session = self._session_for(params)
+        self.require_rollback_support()
+        checkpoints: dict[str, dict[str, Any]] = session.extra.setdefault("checkpoints", {})
+
+        dropped = None
+        if len(checkpoints) >= MAX_CHECKPOINTS_PER_SESSION:
+            dropped = next(iter(checkpoints))
+            Path(checkpoints.pop(dropped)["path"]).unlink(missing_ok=True)
+
+        checkpoint_id = uuid.uuid4().hex[:12]
+        # Kept beside the working copy, so the session's cleanup removes it too.
+        path = Path(session.working_path).with_name(f"checkpoint-{checkpoint_id}.pptx")
+        self.copy_working_file(session, path)
+        label = str(params.get("label") or "")
+        checkpoints[checkpoint_id] = {
+            "path": str(path),
+            "label": label,
+            "created_at": datetime.now(UTC).isoformat(),
+        }
+
+        result: dict[str, Any] = {
+            "success": True,
+            "presentation_id": session.id,
+            "checkpoint_id": checkpoint_id,
+            "label": label,
+            "checkpoint_count": len(checkpoints),
+        }
+        if dropped:
+            result["dropped_checkpoint_id"] = dropped
+            result["warnings"] = [
+                f"Only {MAX_CHECKPOINTS_PER_SESSION} checkpoints are kept per presentation; "
+                f"the oldest ({dropped}) was removed."
+            ]
+        return result
+
+    def restore_checkpoint(self, params: dict[str, Any]) -> dict[str, Any]:
+        session = self._session_for(params)
+        self.require_rollback_support()
+        checkpoints: dict[str, dict[str, Any]] = session.extra.get("checkpoints", {})
+        checkpoint_id = str(params["checkpoint_id"])
+        checkpoint = checkpoints.get(checkpoint_id)
+        if checkpoint is None:
+            raise BridgeError(
+                code="not_found",
+                message=f"Checkpoint '{checkpoint_id}' not found.",
+                details={"checkpoint_id": checkpoint_id, "available_checkpoints": list(checkpoints)},
+                hint="Use a checkpoint_id returned by pptx_create_checkpoint for this presentation.",
+            )
+
+        self.restore_working_file(session, Path(checkpoint["path"]))
+        session.dirty = True
+        return {
+            "success": True,
+            "presentation_id": session.id,
+            "checkpoint_id": checkpoint_id,
+            "label": checkpoint["label"],
+            # The checkpoint is kept: it can be restored again.
+            "presentation_state": self.get_presentation_state({"presentation_id": session.id}),
+        }

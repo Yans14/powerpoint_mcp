@@ -1,7 +1,7 @@
 import path from "node:path";
 import { z } from "zod";
 
-const MEASUREMENT_RE = /^\d+(?:\.\d+)?(?:in|pt|cm|px)$/i;
+export const MEASUREMENT_RE = /^\d+(?:\.\d+)?(?:in|pt|cm|px)$/i;
 
 const presentationIdSchema = z
   .string()
@@ -45,11 +45,29 @@ const shapeIdentifierSchema = z
     message: "Either shape_name or shape_id is required.",
   });
 
+export type ToolCategory =
+  | "Session"
+  | "Discovery"
+  | "Slides"
+  | "Placeholders"
+  | "Shapes"
+  | "Tables"
+  | "Charts"
+  | "Agent"
+  | "Checkers";
+
+/**
+ * Single source of truth for the tool surface. The Python side (validation, web UI forms, agent
+ * manifest, method routing) reads python/generated/tool_catalog.json, generated from this list
+ * by `npm run gen:catalog`.
+ */
 export interface ToolDefinition {
   name: string;
   description: string;
   schema: z.ZodTypeAny;
   mutating: boolean;
+  /** Grouping used by the web UI and the agent's capability manifest. */
+  category: ToolCategory;
 }
 
 export const TOOL_DEFINITIONS: ToolDefinition[] = [
@@ -58,6 +76,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     description: "Return active engine mode and runtime details.",
     schema: z.object({}).strict(),
     mutating: false,
+    category: "Session",
   },
   {
     name: "pptx_create_presentation",
@@ -73,6 +92,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Session",
   },
   {
     name: "pptx_open_presentation",
@@ -83,6 +103,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Session",
   },
   {
     name: "pptx_save_presentation",
@@ -94,6 +115,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Session",
   },
   {
     name: "pptx_close_presentation",
@@ -104,12 +126,14 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Session",
   },
   {
     name: "pptx_list_open_presentations",
     description: "List all open presentation sessions and associated file paths.",
     schema: z.object({}).strict(),
     mutating: false,
+    category: "Session",
   },
   {
     name: "pptx_get_presentation_state",
@@ -120,6 +144,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: false,
+    category: "Session",
   },
   {
     name: "pptx_get_layouts",
@@ -131,6 +156,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: false,
+    category: "Discovery",
   },
   {
     name: "pptx_get_layout_detail",
@@ -145,6 +171,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: false,
+    category: "Discovery",
   },
   {
     name: "pptx_get_masters",
@@ -155,6 +182,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: false,
+    category: "Discovery",
   },
   {
     name: "pptx_get_theme",
@@ -165,6 +193,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: false,
+    category: "Discovery",
   },
   {
     name: "pptx_get_slide",
@@ -176,6 +205,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: false,
+    category: "Slides",
   },
   {
     name: "pptx_add_slide",
@@ -192,6 +222,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Slides",
   },
   {
     name: "pptx_duplicate_slide",
@@ -204,6 +235,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Slides",
   },
   {
     name: "pptx_delete_slide",
@@ -216,6 +248,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Slides",
   },
   {
     name: "pptx_reorder_slides",
@@ -228,6 +261,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Slides",
   },
   {
     name: "pptx_move_slide",
@@ -240,6 +274,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Slides",
   },
   {
     name: "pptx_set_slide_background",
@@ -256,6 +291,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Slides",
   },
   {
     name: "pptx_get_slide_snapshot",
@@ -278,6 +314,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         message: "Provide exactly one of slide_index or slide_indices.",
       }),
     mutating: false,
+    category: "Slides",
   },
   {
     name: "pptx_get_placeholders",
@@ -289,6 +326,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: false,
+    category: "Placeholders",
   },
   {
     name: "pptx_set_placeholder_text",
@@ -310,6 +348,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Placeholders",
   },
   {
     name: "pptx_set_placeholder_image",
@@ -323,6 +362,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Placeholders",
   },
   {
     name: "pptx_clear_placeholder",
@@ -335,6 +375,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Placeholders",
   },
   {
     name: "pptx_get_placeholder_text",
@@ -347,6 +388,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: false,
+    category: "Placeholders",
   },
 
   // --- Phase 3A: Rich text & content reading ---
@@ -386,6 +428,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Placeholders",
   },
   {
     name: "pptx_add_text_box",
@@ -432,6 +475,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Shapes",
   },
   {
     name: "pptx_get_slide_text",
@@ -444,6 +488,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: false,
+    category: "Slides",
   },
   {
     name: "pptx_get_shape_details",
@@ -461,6 +506,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         message: "Either shape_name or shape_id is required.",
       }),
     mutating: false,
+    category: "Shapes",
   },
 
   // --- Phase 3B: Table support ---
@@ -485,6 +531,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Tables",
   },
   {
     name: "pptx_get_table",
@@ -501,6 +548,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         message: "Either shape_name or shape_id is required.",
       }),
     mutating: false,
+    category: "Tables",
   },
   {
     name: "pptx_set_table_cell",
@@ -526,6 +574,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         message: "Either shape_name or shape_id is required.",
       }),
     mutating: true,
+    category: "Tables",
   },
   {
     name: "pptx_set_table_data",
@@ -561,6 +610,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         message: "Either shape_name or shape_id is required.",
       }),
     mutating: true,
+    category: "Tables",
   },
 
   // --- Phase 3C: Shapes, notes, extras ---
@@ -589,6 +639,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Shapes",
   },
   {
     name: "pptx_delete_shape",
@@ -605,6 +656,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         message: "Either shape_name or shape_id is required.",
       }),
     mutating: true,
+    category: "Shapes",
   },
   {
     name: "pptx_set_slide_notes",
@@ -617,6 +669,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Slides",
   },
   {
     name: "pptx_set_shape_text",
@@ -657,6 +710,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         message: "Either shape_name or shape_id is required.",
       }),
     mutating: true,
+    category: "Shapes",
   },
   {
     name: "pptx_get_slide_xml",
@@ -668,6 +722,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: false,
+    category: "Slides",
   },
 
   // --- Phase 4: Flexibility tools ---
@@ -696,6 +751,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         message: "Either shape_name or shape_id is required.",
       }),
     mutating: true,
+    category: "Shapes",
   },
   {
     name: "pptx_clone_shape",
@@ -715,6 +771,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         message: "Either shape_name or shape_id is required.",
       }),
     mutating: true,
+    category: "Shapes",
   },
   {
     name: "pptx_group_shapes",
@@ -729,6 +786,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Shapes",
   },
   {
     name: "pptx_ungroup_shapes",
@@ -745,6 +803,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         message: "Either shape_name or shape_id is required.",
       }),
     mutating: true,
+    category: "Shapes",
   },
   {
     name: "pptx_set_shape_z_order",
@@ -762,6 +821,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         message: "Either shape_name or shape_id is required.",
       }),
     mutating: true,
+    category: "Shapes",
   },
   {
     name: "pptx_add_image",
@@ -778,6 +838,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Shapes",
   },
   {
     name: "pptx_add_line",
@@ -797,6 +858,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Shapes",
   },
   {
     name: "pptx_find_replace_text",
@@ -811,6 +873,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Slides",
   },
 
   // --- Phase 5: Chart tools ---
@@ -885,6 +948,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Charts",
   },
   {
     name: "pptx_get_chart_data",
@@ -901,6 +965,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         message: "Either shape_name or shape_id is required.",
       }),
     mutating: false,
+    category: "Charts",
   },
   {
     name: "pptx_update_chart_data",
@@ -931,6 +996,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         message: "Either shape_name or shape_id is required.",
       }),
     mutating: true,
+    category: "Charts",
   },
   {
     name: "pptx_set_chart_style",
@@ -957,6 +1023,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         message: "Either shape_name or shape_id is required.",
       }),
     mutating: true,
+    category: "Charts",
   },
 
   // --- Phase 6: Agent workflow tools ---
@@ -981,6 +1048,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         message: "Either shape_name or shape_id is required.",
       }),
     mutating: true,
+    category: "Shapes",
   },
   {
     name: "pptx_get_slide_shapes",
@@ -993,6 +1061,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: false,
+    category: "Shapes",
   },
   {
     name: "pptx_set_table_cell_merge",
@@ -1016,6 +1085,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         message: "end_row must be >= start_row and end_col must be >= start_col.",
       }),
     mutating: true,
+    category: "Tables",
   },
 
   // --- Phase 7: Formatting & Fidelity tools ---
@@ -1039,6 +1109,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         message: "Either shape_name or shape_id is required.",
       }),
     mutating: true,
+    category: "Placeholders",
   },
   {
     name: "pptx_set_text_box_properties",
@@ -1062,6 +1133,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         message: "Either shape_name or shape_id is required.",
       }),
     mutating: true,
+    category: "Shapes",
   },
   {
     name: "pptx_set_table_style",
@@ -1085,6 +1157,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         message: "Either shape_name or shape_id is required.",
       }),
     mutating: true,
+    category: "Tables",
   },
   {
     name: "pptx_set_shape_fill_gradient",
@@ -1111,6 +1184,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         message: "Either shape_name or shape_id is required.",
       }),
     mutating: true,
+    category: "Shapes",
   },
   {
     name: "pptx_add_connector",
@@ -1131,6 +1205,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Slides",
   },
 
   // --- Phase 8: Agent Orchestrator tools ---
@@ -1155,6 +1230,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: false,
+    category: "Agent",
   },
   {
     name: "pptx_agent_respond",
@@ -1174,6 +1250,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: false,
+    category: "Agent",
   },
   {
     name: "pptx_agent_execute",
@@ -1186,6 +1263,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Agent",
   },
   {
     name: "pptx_agent_status",
@@ -1196,6 +1274,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: false,
+    category: "Agent",
   },
   {
     name: "pptx_agent_rollback",
@@ -1206,6 +1285,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Agent",
   },
   {
     name: "pptx_agent_cancel",
@@ -1216,6 +1296,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Agent",
   },
 
   // --- Phase 8: Checker tools ---
@@ -1250,6 +1331,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: false,
+    category: "Checkers",
   },
   {
     name: "pptx_check_visual_consistency",
@@ -1264,6 +1346,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: false,
+    category: "Checkers",
   },
   {
     name: "pptx_check_content",
@@ -1284,6 +1367,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: false,
+    category: "Checkers",
   },
   {
     name: "pptx_check_template_conformance",
@@ -1302,6 +1386,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: false,
+    category: "Checkers",
   },
   {
     name: "pptx_diff_presentations",
@@ -1318,6 +1403,36 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: false,
+    category: "Checkers",
+  },
+  {
+    name: "pptx_create_checkpoint",
+    description:
+      "Remember the presentation's current content so it can be restored later with pptx_restore_checkpoint. " +
+      "Use before a risky series of edits. Up to 10 checkpoints are kept per presentation; they disappear when " +
+      "the presentation is closed. OOXML engine only.",
+    schema: z
+      .object({
+        presentation_id: presentationIdSchema,
+        label: z.string().max(200).optional().describe("Free text to recognise the checkpoint later."),
+      })
+      .strict(),
+    mutating: false,
+    category: "Session",
+  },
+  {
+    name: "pptx_restore_checkpoint",
+    description:
+      "Return the presentation to a checkpoint made with pptx_create_checkpoint, discarding every edit made since. " +
+      "The checkpoint is kept and can be restored again. Does not touch files saved with pptx_save_presentation.",
+    schema: z
+      .object({
+        presentation_id: presentationIdSchema,
+        checkpoint_id: z.string().min(1).describe("checkpoint_id returned by pptx_create_checkpoint."),
+      })
+      .strict(),
+    mutating: true,
+    category: "Session",
   },
   {
     name: "pptx_batch",
@@ -1349,6 +1464,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: true,
+    category: "Session",
   },
 ];
 

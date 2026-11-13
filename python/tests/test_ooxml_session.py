@@ -56,9 +56,9 @@ def test_snapshot_does_not_mark_session_dirty(service, tmp_path, monkeypatch):
     assert _is_dirty(service, pid) is False
 
     # Stand in for LibreOffice/poppler so the test reaches the flush that precedes rendering.
-    monkeypatch.setattr("engines.ooxml_engine.shutil.which", lambda name: f"/fake/{name}")
+    monkeypatch.setattr("engines.ooxml.snapshot.shutil.which", lambda name: f"/fake/{name}")
     monkeypatch.setattr(
-        "engines.ooxml_engine.subprocess.run",
+        "engines.ooxml.snapshot.subprocess.run",
         lambda *args, **kwargs: subprocess.CompletedProcess(args, 1, stdout="", stderr="renderer unavailable"),
     )
 
@@ -160,8 +160,8 @@ class _FakeRenderers:
         self.commands: list[list[str]] = []
         self.kwargs: list[dict] = []
         self.pdf_slide_counts: list[int] = []
-        monkeypatch.setattr("engines.ooxml_engine.shutil.which", lambda name: name)
-        monkeypatch.setattr("engines.ooxml_engine.subprocess.run", self.run)
+        monkeypatch.setattr("engines.ooxml.snapshot.shutil.which", lambda name: name)
+        monkeypatch.setattr("engines.ooxml.snapshot.subprocess.run", self.run)
 
     def run(self, command, **kwargs):
         self.commands.append(command)
@@ -253,8 +253,8 @@ def test_snapshot_reports_a_renderer_that_hangs_as_a_timeout(service, tmp_path, 
     def hang(command, **kwargs):
         raise subprocess.TimeoutExpired(command, kwargs["timeout"])
 
-    monkeypatch.setattr("engines.ooxml_engine.shutil.which", lambda name: name)
-    monkeypatch.setattr("engines.ooxml_engine.subprocess.run", hang)
+    monkeypatch.setattr("engines.ooxml.snapshot.shutil.which", lambda name: name)
+    monkeypatch.setattr("engines.ooxml.snapshot.subprocess.run", hang)
 
     with pytest.raises(BridgeError) as excinfo:
         service.dispatch("pptx_get_slide_snapshot", {"presentation_id": pid, "slide_index": 1})

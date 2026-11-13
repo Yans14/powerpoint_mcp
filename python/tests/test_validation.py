@@ -36,7 +36,11 @@ def test_all_problems_are_reported_together():
         ("pptx_get_slide", {"presentation_id": 42, "slide_index": 1}, "presentation_id"),
         ("pptx_reorder_slides", {"presentation_id": PID, "new_order": "2,1"}, "new_order"),
         ("pptx_create_presentation", {"width": ["10in"]}, "width"),
-        ("pptx_find_replace_text", {"presentation_id": PID, "find": "a", "replace": "b", "case_sensitive": 1}, None),
+        (
+            "pptx_find_replace_text",
+            {"presentation_id": PID, "find_text": "a", "replace_text": "b", "case_sensitive": 1},
+            "case_sensitive",
+        ),
     ],
 )
 def test_wrong_types_are_rejected(method, params, bad_param):
@@ -64,8 +68,27 @@ def test_valid_calls_pass():
     validate_params("pptx_create_presentation", {})
 
 
-def test_optional_null_and_unlisted_parameters_are_accepted():
-    validate_params("pptx_create_presentation", {"width": None, "not_in_catalog": object()})
+def test_null_values_count_as_not_provided_and_are_dropped():
+    assert validate_params("pptx_create_presentation", {"width": None, "height": "4in"}) == {"height": "4in"}
+
+
+def test_unknown_parameters_are_rejected_with_the_valid_names():
+    # A misspelt optional parameter used to be ignored silently.
+    errors = _errors("pptx_set_shape_text", {"presentation_id": PID, "slide_index": 1, "shape_name": "a", "txt": "x"})
+
+    assert "txt" in errors
+    assert "text_content" in errors["txt"]
+
+
+def test_measurement_units_are_case_insensitive_like_the_typescript_schema():
+    validate_params("pptx_create_presentation", {"width": "10IN", "height": "7.5in"})
+    assert "width" in _errors("pptx_create_presentation", {"width": "10 inches"})
+
+
+def test_nested_problems_name_their_path():
+    errors = _errors("pptx_reorder_slides", {"presentation_id": PID, "new_order": [1, "two"]})
+
+    assert "new_order.1" in errors
 
 
 def test_unknown_methods_are_not_checked():

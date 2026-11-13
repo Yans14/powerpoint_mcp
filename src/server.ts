@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
 
-import { z } from "zod";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import {
   CallToolRequestSchema,
@@ -21,8 +20,10 @@ import { listResources, readResource, RESOURCE_TEMPLATES, ResourceNotFoundError 
 import { BATCH_TOOL_NAME, prepareBatch } from "./tools/batch.js";
 import { TOOL_DEFINITIONS, TOOL_MAP } from "./tools/catalog.js";
 import { OUTPUT_SCHEMAS, toOutputSchema } from "./tools/outputs.js";
+import { toInputSchema } from "./tools/schema.js";
 import {
   acceptsIncludeState,
+  isAgentEnabled,
   isToolInProfile,
   parseToolProfile,
   toolAnnotations,
@@ -39,59 +40,17 @@ const SESSION_LIFECYCLE_TOOLS = new Set([
   "pptx_close_presentation",
 ]);
 
-// Repeated on every mutating tool, so the description is kept to one short sentence.
-const INCLUDE_STATE_SCHEMA = {
-  type: "boolean",
-  description: "Also return the per-slide presentation_state, not just slide_count. Default false.",
-};
-
 const PACKAGE_VERSION = (
   JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string }
 ).version;
 
+export { toInputSchema };
+
 export interface McpServerOptions {
   /** Which tools to expose. Defaults to PPTX_TOOL_PROFILE, then "full". */
   profile?: ToolProfile;
-}
-
-/**
- * Convert a tool's zod schema into the JSON Schema advertised over MCP.
- * Uses zod 4's native converter; `io: "input"` keeps fields with defaults optional for callers.
- */
-export function toInputSchema(schema: z.ZodTypeAny, options: { includeState?: boolean } = {}): Record<string, unknown> {
-  const jsonSchema = z.toJSONSchema(schema, {
-    target: "draft-7",
-    io: "input",
-    unrepresentable: "any",
-    // Drop converter noise that costs tokens in every tools/list without informing the model:
-    // the UUID regex (format already says it) and JS safe-integer bounds.
-    override: ({ jsonSchema: node }) => {
-      if (node.format === "uuid") {
-        delete node.pattern;
-      }
-      if (node.type === "integer") {
-        if (node.maximum === Number.MAX_SAFE_INTEGER) {
-          delete node.maximum;
-        }
-        if (node.minimum === Number.MIN_SAFE_INTEGER) {
-          delete node.minimum;
-        }
-      }
-    },
-  }) as Record<string, unknown>;
-
-  delete jsonSchema.$schema;
-
-  if (jsonSchema.type !== "object") {
-    throw new Error("Tool input schema must be a JSON Schema object.");
-  }
-
-  if (options.includeState) {
-    // Handled by the server for every mutating tool, so it is added here rather than in each schema.
-    jsonSchema.properties = { ...(jsonSchema.properties as Record<string, unknown>), include_state: INCLUDE_STATE_SCHEMA };
-  }
-
-  return jsonSchema;
+  /** Expose the pptx_agent_* tools. Defaults to PPTX_ENABLE_AGENT. */
+  agentEnabled?: boolean;
 }
 
 /**
@@ -147,7 +106,14 @@ function toResourceError(error: unknown, uri: string): McpError {
 
 export function createMcpServer(bridge: PythonBridgeClient, options: McpServerOptions = {}): Server {
   const profile = options.profile ?? parseToolProfile(process.env.PPTX_TOOL_PROFILE);
-  const isToolAvailable = (name: string): boolean => TOOL_MAP.has(name) && isToolInProfile(name, profile);
+  const agentEnabled = options.agentEnabled ?? isAgentEnabled();
+  const isToolAvailable = (name: string): boolean => {
+    const definition = TOOL_MAP.get(name);
+    if (!definition || !isToolInProfile(name, profile)) {
+      return false;
+    }
+    return agentEnabled || definition.category !== "Agent";
+  };
 
   const server = new Server(
     {
@@ -190,7 +156,10 @@ export function createMcpServer(bridge: PythonBridgeClient, options: McpServerOp
         message: `Unknown tool: ${toolName}`,
         ...(definition
           ? {
-              hint: `${toolName} is not part of the "${profile}" tool profile. Start the server with PPTX_TOOL_PROFILE=full to use it.`,
+              hint:
+                definition.category === "Agent" && !agentEnabled
+                  ? `${toolName} needs the embedded agent. Start the server with PPTX_ENABLE_AGENT=1 to use it.`
+                  : `${toolName} is not part of the "${profile}" tool profile. Start the server with PPTX_TOOL_PROFILE=full to use it.`,
             }
           : {}),
       });

@@ -14,6 +14,7 @@ const DESTRUCTIVE_TOOLS = new Set([
   "pptx_clear_placeholder",
   "pptx_agent_rollback",
   "pptx_agent_cancel",
+  "pptx_restore_checkpoint", // discards edits made since the checkpoint
   "pptx_batch", // may contain any of the above
 ]);
 
@@ -35,13 +36,14 @@ const IDEMPOTENT_MUTATIONS = new Set([
   "pptx_set_text_box_properties",
   "pptx_update_chart_data",
   "pptx_set_chart_style",
+  "pptx_restore_checkpoint",
 ]);
 
 /** Reach outside this machine: these call an LLM provider's API. */
 const OPEN_WORLD_TOOLS = new Set(["pptx_agent_start", "pptx_agent_respond"]);
 
 /** Not read-only in the catalog's sense, yet each call creates state or spends LLM calls. */
-const NON_REPEATABLE_READS = new Set(["pptx_agent_start", "pptx_agent_respond"]);
+const NON_REPEATABLE_READS = new Set(["pptx_agent_start", "pptx_agent_respond", "pptx_create_checkpoint"]);
 
 /** The `core` profile: enough to build and edit a deck end to end with about half the tools. */
 const CORE_TOOLS = new Set([
@@ -134,4 +136,9 @@ export function parseToolProfile(value: string | undefined): ToolProfile {
 
 export function isToolInProfile(name: string, profile: ToolProfile): boolean {
   return profile === "full" || CORE_TOOLS.has(name);
+}
+
+/** Agent tools exist only when the embedded LLM agent is switched on (PPTX_ENABLE_AGENT, as in Python). */
+export function isAgentEnabled(value: string | undefined = process.env.PPTX_ENABLE_AGENT): boolean {
+  return ["1", "true", "yes", "on"].includes((value ?? "").trim().toLowerCase());
 }

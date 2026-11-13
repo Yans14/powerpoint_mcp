@@ -94,6 +94,17 @@ Critère de sortie : un test d'intégration lance le serveur depuis un autre dos
 
 ## 5. Phase 3 — Architecture et dette
 
+> **Statut (2026-11-13) : faite, non vérifiée sous Windows.**
+> - Source unique : `src/tools/catalog.ts` (avec une `category` par outil) est exporté par `npm run gen:catalog` vers `python/generated/tool_catalog.json`. Python en dérive validation (jsonschema, mêmes schémas que le client MCP), routage `pptx_<nom>` → `engine.<nom>` (dossier `handlers/` supprimé), formulaires de l'UI web et manifeste de l'agent. CI et `npm run check` échouent si le JSON est périmé.
+> - Conséquence : un paramètre inconnu est maintenant refusé côté Python (UI web, plans de l'agent) au lieu d'être ignoré ; les valeurs `null` sont retirées avant l'appel moteur.
+> - Moteurs découpés en 9 modules chacun (`engines/ooxml/`, `engines/com/`) ; `ooxml_engine.py` et `com_engine.py` restent les points d'entrée. Découpage mécanique : source de chacune des 105 + 151 méthodes vérifiée identique avant/après.
+> - Couplage : `BaseEngine.get_pptx()` remplace `extra["prs"]` dans checkers et agent ; en COM, export par `SaveCopyAs`. Rollback de l'agent et `pptx_batch` passent par `copy_working_file` / `restore_working_file`.
+> - Checkpoints exposés en outils : `pptx_create_checkpoint`, `pptx_restore_checkpoint` (OOXML, 10 par présentation).
+> - Agent : désactivé par défaut, activé par `PPTX_ENABLE_AGENT=1` (avant : actif dès qu'une `ANTHROPIC_API_KEY` traînait dans l'environnement) ; outils `pptx_agent_*` masqués sinon ; modèle par défaut `claude-sonnet-5-5` ; `PPTX_AGENT_TIMEOUT` appliqué entre les étapes ; SDK dans `requirements-agent.txt`.
+> - Dépendances : `requirements.txt` (bridge, + `jsonschema`), `requirements-ui.txt` (FastAPI, uvicorn, websockets), `requirements-agent.txt`. Versions alignées : Node ≥ 22, Python ≥ 3.11.
+>
+> Non vérifié : tout le code COM (découpage, `get_pptx` par `SaveCopyAs`) faute de Windows ; agent jamais exécuté avec un vrai LLM ; modèle OpenAI par défaut (`gpt-4o`) laissé tel quel.
+
 - **Source unique pour le catalogue.** Un outil est décrit à cinq endroits : schéma zod (`catalog.ts`, 1 315 lignes), `tool_catalog.py` (928), `capability_manifest.py`, `handlers/*.py`, `BaseEngine`. Générer le catalogue Python et le manifeste depuis le JSON Schema produit par TypeScript, et valider les paramètres côté Python avec ce même schéma (règle le point 0.8).
 - **Découper les moteurs.** Scinder les deux fichiers de 2 500+ lignes par domaine (session, slides, formes, tableaux, graphiques, texte), avec les helpers OOXML à part.
 - **Couplage OOXML des checkers et de l'agent.** `CheckerService`, `SnapshotManager` et `AgentOrchestrator` lisent `engine.sessions[id].extra["prs"]`. `com_engine.py` ne définit jamais `"prs"` : ces outils échoueront en mode COM. Ajouter à `BaseEngine` une méthode qui fournit un `Presentation` python-pptx à jour (export du fichier de travail en COM).

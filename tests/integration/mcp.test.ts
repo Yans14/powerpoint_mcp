@@ -48,7 +48,9 @@ describe("MCP server over stdio", () => {
   it("advertises every tool with a usable input schema", async () => {
     const { tools } = await client.listTools();
 
-    expect(tools.map((tool) => tool.name).sort()).toEqual(TOOL_DEFINITIONS.map((tool) => tool.name).sort());
+    // The agent tools are off unless PPTX_ENABLE_AGENT is set.
+    const expected = TOOL_DEFINITIONS.filter((tool) => tool.category !== "Agent").map((tool) => tool.name);
+    expect(tools.map((tool) => tool.name).sort()).toEqual(expected.sort());
     for (const tool of tools) {
       expect(tool.inputSchema.type, tool.name).toBe("object");
       expect(tool.inputSchema.properties, tool.name).toBeDefined();

@@ -28,7 +28,7 @@ class AgentOrchestrator:
         llm = LLMClient(config)
         self.clarifier = LLMClarifier(llm)
         self.planner = LLMPlanner(llm, max_steps=config.max_steps)
-        self.executor = PlanExecutor(engine, method_map)
+        self.executor = PlanExecutor(engine, method_map, timeout_sec=config.execution_timeout_sec)
         self.snapshot_mgr = SnapshotManager(engine)
 
     def dispatch(self, method: str, params: dict[str, Any]) -> Any:
@@ -197,7 +197,7 @@ class AgentOrchestrator:
             from checkers.content_checker import ContentChecker
             from checkers.position_checker import PositionChecker
 
-            prs = self.engine.sessions[task.presentation_id].extra["prs"]
+            prs = self.engine.get_pptx(task.presentation_id)
             slide_count = final_state.get("slide_count", 0)
             slide_indices = list(range(1, slide_count + 1))
 

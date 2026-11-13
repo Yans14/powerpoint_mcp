@@ -21,9 +21,9 @@ Only implemented tools are registered.
 ## Runtime Targets
 
 - Node.js `>=22`
-- Python `>=3.12`
+- Python `>=3.11`
 
-Note: local development can run with compatible lower patch/minor versions, but Node 22/Python 3.12 are the declared baseline.
+CI runs Node 22 and Python 3.12.
 
 ## Install
 
@@ -32,6 +32,13 @@ npm install
 python3 -m pip install -r requirements.txt -r requirements-dev.txt
 pre-commit install --install-hooks
 ```
+
+Optional extras:
+
+| File | For |
+| --- | --- |
+| `requirements-ui.txt` | Local web test console (`python/web_ui.py`) |
+| `requirements-agent.txt` | Embedded LLM agent (`pptx_agent_*` tools), also needs `PPTX_ENABLE_AGENT=1` |
 
 You can do the same with:
 
@@ -59,7 +66,7 @@ make mcp-start
 
 The repo includes a lightweight FastAPI + static HTML UI for interactive testing of tools, sessions, and logs.
 
-Run it from the project root:
+Install its dependencies with `python3 -m pip install -r requirements-ui.txt`, then run it from the project root:
 
 ```bash
 python3 -m uvicorn web_ui:app --app-dir python --host 127.0.0.1 --port 8000 --reload
@@ -80,7 +87,7 @@ What it exposes:
 Relevant files:
 
 - `python/web_ui.py` (FastAPI app + API routes + WebSocket log broadcast)
-- `python/tool_catalog.py` (UI-facing tool metadata/catalog shaping)
+- `python/tool_catalog.py` (tool metadata read from the generated catalog)
 - `web/index.html` (single-page test UI)
 
 ## Architecture
@@ -88,11 +95,18 @@ Relevant files:
 - `src/index.ts`: MCP stdio entrypoint
 - `src/server.ts`: MCP tool/resource registration and validation
 - `src/bridge/client.ts`: persistent Python subprocess client
-- `src/tools/catalog.ts`: flat zod schemas for all v1 tools
+- `src/tools/catalog.ts`: zod schemas for every tool, the single source of truth for the tool surface.
+  `npm run gen:catalog` exports it to `python/generated/tool_catalog.json`, which the Python side uses for
+  validation, routing (`pptx_<name>` → `engine.<name>`), the web UI forms and the agent's tool list.
+  Edit the TypeScript catalog, then regenerate; CI fails if the JSON is stale.
 - `python/bridge.py`: line-delimited JSON-RPC dispatcher
 - `python/service.py`: engine selection + method routing
-- `python/engines/ooxml_engine.py`: cross-platform implementation
-- `python/engines/com_engine.py`: Windows COM implementation
+- `python/engines/ooxml_engine.py`: cross-platform engine, assembled from per-domain mixins in
+  `python/engines/ooxml/` (session, discovery, slides, snapshot, text, shapes, tables, charts) on top of
+  `ooxml/core.py` (shared state and helpers)
+- `python/engines/com_engine.py`: Windows COM engine, same layout under `python/engines/com/`
+- `python/engines/base.py`: engine interface, plus `get_pptx` (read access used by checkers and the agent)
+  and checkpoint support
 - `python/com_worker.py`: STA-thread COM call isolation
 
 ## Implemented Tools
@@ -151,7 +165,9 @@ All mutating operations return `success` plus updated `presentation_state` (exce
 | `PPTX_RENDER_TIMEOUT_SEC` | `90` | Time budget for rendering a snapshot request (LibreOffice + pdftoppm) |
 | `PPTX_LOG_LEVEL` | `INFO` | Bridge log level on stderr (`DEBUG`, `INFO`, `WARNING`, ...) |
 | `PPTX_WORKSPACE_DIR` | `<tmp>/pptx-mcp` | Root directory for session working files |
-| `PPTX_TOOL_PROFILE` | `full` | `core` exposes 31 essential tools instead of all 69 (about half the tool-list size) |
+| `PPTX_ENABLE_AGENT` | off | `1` exposes the `pptx_agent_*` tools (embedded LLM planner; needs `requirements-agent.txt` and an API key) |
+| `PPTX_LLM_MODEL` | `claude-sonnet-5-5` (Anthropic) | Model used by the embedded agent |
+| `PPTX_TOOL_PROFILE` | `full` | `core` exposes 31 essential tools instead of the full set (about half the tool-list size) |
 
 ## MCP surface
 
@@ -162,6 +178,8 @@ All mutating operations return `success` plus updated `presentation_state` (exce
 - **`pptx_batch`** runs up to 50 operations on one presentation in a single call. All operations are validated
   first; with `atomic` (default) a failure restores the presentation (OOXML engine).
   Saving, closing and agent tools are not allowed inside a batch.
+- **Checkpoints**: `pptx_create_checkpoint` / `pptx_restore_checkpoint` return a presentation to an earlier state
+  (OOXML engine, up to 10 per presentation, removed when it is closed).
 - **Errors** are `{code, message, details?, hint?}`. `hint` names the tool to call next
   (for example `pptx_get_layouts` after an unknown layout).
 - **Structured output**: `pptx_list_open_presentations`, `pptx_get_presentation_state`, `pptx_get_layouts`,

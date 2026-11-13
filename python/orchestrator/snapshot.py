@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
 from engines.base import BaseEngine, EngineSession
@@ -16,16 +15,16 @@ class SnapshotManager:
     def __init__(self, engine: BaseEngine) -> None:
         self.engine = engine
 
-    def create(self, session: EngineSession) -> str:
-        # Edits may still be in memory only; the snapshot must capture them.
-        self.engine.flush_session(session)
+    def create(self, session: EngineSession) -> str | None:
+        """Write a rollback copy. Returns None when the engine cannot restore one."""
+        if not self.engine.supports_rollback:
+            return None
         snapshot_path = session.working_path + ".snapshot"
-        shutil.copy2(session.working_path, snapshot_path)
+        self.engine.copy_working_file(session, Path(snapshot_path))
         return snapshot_path
 
     def restore(self, session: EngineSession, snapshot_path: str) -> None:
-        shutil.copy2(snapshot_path, session.working_path)
-        self.engine.reload_session(session)
+        self.engine.restore_working_file(session, Path(snapshot_path))
         session.dirty = True
 
     def remove(self, snapshot_path: str) -> None:
