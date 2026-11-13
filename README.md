@@ -129,11 +129,52 @@ All mutating operations return `success` plus updated `presentation_state` (exce
 - Opened/created presentations are edited in a temporary working copy.
 - Original files are not modified until explicit `pptx_save_presentation`.
 - Sessions are in-memory and do not survive process restart.
+- In OOXML mode, edits stay in memory and the working copy is written only when something needs the file
+  (`pptx_save_presentation`, `pptx_get_theme`, snapshots, agent rollback). Unsaved edits are lost if the bridge dies.
+- Working files live in `<tmp>/pptx-mcp/bridge-<pid>-*/` and are removed on shutdown; leftovers from a
+  killed process are removed the next time the server starts.
+
+## Failure handling
+
+- A bridge call that exceeds its time budget returns `timeout`; the Python bridge is stopped and restarted on the next call.
+- After a bridge restart or crash, calls using a presentation id from the previous process return `session_lost`:
+  reopen the file and use the new id.
+- A missing Python interpreter is reported as `dependency_missing` at startup.
+
+## Environment variables
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PPTX_PYTHON_BIN` | `python3` | Python interpreter used to run the bridge |
+| `PPTX_PY_BRIDGE` | bundled `python/bridge.py` | Alternative bridge script |
+| `PPTX_BRIDGE_TIMEOUT_MS` | `120000` | Time budget for one bridge call (`pptx_agent_*` tools get at least 600000) |
+| `PPTX_RENDER_TIMEOUT_SEC` | `90` | Time budget for rendering a snapshot request (LibreOffice + pdftoppm) |
+| `PPTX_LOG_LEVEL` | `INFO` | Bridge log level on stderr (`DEBUG`, `INFO`, `WARNING`, ...) |
+| `PPTX_WORKSPACE_DIR` | `<tmp>/pptx-mcp` | Root directory for session working files |
+| `PPTX_TOOL_PROFILE` | `full` | `core` exposes 31 essential tools instead of all 69 (about half the tool-list size) |
+
+## MCP surface
+
+- **Tools** carry explicit annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`).
+  `pptx_save_presentation` is marked destructive: it overwrites `output_path`.
+- **Responses** are compact JSON. Mutating tools return `slide_count`; pass `include_state: true` to also get
+  the per-slide `presentation_state`.
+- **`pptx_batch`** runs up to 50 operations on one presentation in a single call. All operations are validated
+  first; with `atomic` (default) a failure restores the presentation (OOXML engine).
+  Saving, closing and agent tools are not allowed inside a batch.
+- **Errors** are `{code, message, details?, hint?}`. `hint` names the tool to call next
+  (for example `pptx_get_layouts` after an unknown layout).
+- **Structured output**: `pptx_list_open_presentations`, `pptx_get_presentation_state`, `pptx_get_layouts`,
+  `pptx_get_layout_detail` and `pptx_get_placeholders` declare an `outputSchema` and return `structuredContent`.
+- **Resources**: `pptx://presentations` lists open presentations; slides, layouts, masters, theme and
+  snapshots (`image/jpeg` blob) are resource templates under `pptx://presentations/{presentation_id}`.
+- **Prompts**: `create_deck_from_outline`, `apply_template_to_deck`.
 
 ## Snapshots
 
 - COM mode: native `Slide.Export`
-- OOXML mode: `soffice --headless` + `pdftoppm`
+- OOXML mode: `soffice --headless` + `pdftoppm`. The PDF conversion is cached until the presentation changes.
+- Pass `slide_indices` instead of `slide_index` to get up to 20 slides in one call.
 - If dependencies are missing in OOXML mode, snapshot returns `dependency_missing` with install hint.
 
 ## Test

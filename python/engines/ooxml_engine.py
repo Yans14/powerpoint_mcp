@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import base64
 import copy
+import logging
 import os
 import re
 import shutil
 import subprocess
-import sys
-import tempfile
+import time
 import uuid
 import zipfile
 from pathlib import Path
@@ -21,11 +21,17 @@ from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE
 from pptx.enum.text import PP_ALIGN
 from pptx.util import Emu, Pt
 
-from engines.base import BaseEngine, EngineSession
-from errors import BridgeError, ensure
+from engines.base import BaseEngine, EngineSession, snapshot_slide_indices
+from engines.ooxml_rels import assign_fresh_shape_ids, copy_slide_content, transfer_relationships
+from errors import SESSION_NOT_FOUND_HINT, BridgeError, ensure
 from utils.colors import normalize_color
 from utils.paths import validate_existing_file, validate_output_file
 from utils.units import emu_to_inches, to_emu
+from workspace import Workspace
+
+logger = logging.getLogger("pptx_mcp.engine.ooxml")
+
+_DEFAULT_RENDER_TIMEOUT_SEC = 90.0
 
 _COLOR_NAMESPACES = {
     "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
@@ -38,6 +44,7 @@ class OOXMLEngine(BaseEngine):
     def __init__(self, metadata: dict[str, Any]) -> None:
         self.metadata = metadata
         self.sessions: dict[str, EngineSession] = {}
+        self.workspace = Workspace()
 
     def get_engine_info(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         return {
@@ -52,11 +59,16 @@ class OOXMLEngine(BaseEngine):
 
         if template_path:
             template = validate_existing_file(str(template_path), expected_suffixes=(".pptx", ".potx"))
-            fd, tmp_path = tempfile.mkstemp(suffix=".pptx", prefix="pptx-session-")
-            os.close(fd)
-            Path(tmp_path).unlink(missing_ok=True)
+            session_dir, tmp_path = self._new_session_files()
             shutil.copy2(template, tmp_path)
             prs = Presentation(str(tmp_path))
+            if width is not None or height is not None:
+                # An explicit size overrides the template's page setup.
+                if width is not None:
+                    prs.slide_width = to_emu(width)
+                if height is not None:
+                    prs.slide_height = to_emu(height)
+                prs.save(tmp_path)
             original_path = str(template)
         else:
             prs = Presentation()
@@ -64,9 +76,7 @@ class OOXMLEngine(BaseEngine):
                 prs.slide_width = to_emu(width)
             if height is not None:
                 prs.slide_height = to_emu(height)
-            fd, tmp_path = tempfile.mkstemp(suffix=".pptx", prefix="pptx-session-")
-            os.close(fd)
-            Path(tmp_path).unlink(missing_ok=True)
+            session_dir, tmp_path = self._new_session_files()
             prs.save(tmp_path)
             prs = Presentation(tmp_path)
             original_path = ""
@@ -78,7 +88,7 @@ class OOXMLEngine(BaseEngine):
             working_path=tmp_path,
             engine=self.name,
             dirty=True,
-            extra={"prs": prs},
+            extra={"prs": prs, "session_dir": session_dir},
         )
         self.sessions[session_id] = session
 
@@ -95,9 +105,7 @@ class OOXMLEngine(BaseEngine):
     def open_presentation(self, params: dict[str, Any]) -> dict[str, Any]:
         source = validate_existing_file(str(params["file_path"]), expected_suffixes=(".pptx", ".potx"))
 
-        fd, tmp_path = tempfile.mkstemp(suffix=".pptx", prefix="pptx-session-")
-        os.close(fd)
-        Path(tmp_path).unlink(missing_ok=True)
+        session_dir, tmp_path = self._new_session_files()
         shutil.copy2(source, tmp_path)
 
         session_id = str(uuid.uuid4())
@@ -108,7 +116,7 @@ class OOXMLEngine(BaseEngine):
             working_path=tmp_path,
             engine=self.name,
             dirty=False,
-            extra={"prs": prs},
+            extra={"prs": prs, "session_dir": session_dir},
         )
         self.sessions[session_id] = session
 
@@ -123,8 +131,9 @@ class OOXMLEngine(BaseEngine):
     def save_presentation(self, params: dict[str, Any]) -> dict[str, Any]:
         session = self._get_session(str(params["presentation_id"]))
         output_path = validate_output_file(str(params["output_path"]), expected_suffixes=(".pptx",))
-        prs = self._prs(session)
-        prs.save(session.working_path)
+        # Always write, even when no edit was recorded: saving must never depend on bookkeeping.
+        self._prs(session).save(session.working_path)
+        session.flushed_revision = session.revision
         shutil.copy2(session.working_path, output_path)
         session.dirty = False
 
@@ -139,10 +148,7 @@ class OOXMLEngine(BaseEngine):
     def close_presentation(self, params: dict[str, Any]) -> dict[str, Any]:
         session = self._get_session(str(params["presentation_id"]))
         self.sessions.pop(session.id, None)
-        try:
-            Path(session.working_path).unlink(missing_ok=True)
-        except Exception:
-            pass
+        self._remove_session_files(session)
 
         return {
             "success": True,
@@ -247,6 +253,7 @@ class OOXMLEngine(BaseEngine):
 
     def get_theme(self, params: dict[str, Any]) -> dict[str, Any]:
         session = self._get_session(str(params["presentation_id"]))
+        self.flush_session(session)
         theme_data = self._extract_theme(Path(session.working_path))
 
         return {
@@ -293,7 +300,7 @@ class OOXMLEngine(BaseEngine):
                 self._reorder_slide_ids(prs, order)
                 new_index = position
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -312,25 +319,8 @@ class OOXMLEngine(BaseEngine):
 
         duplicate = prs.slides.add_slide(source_slide.slide_layout)
 
-        # Copy non-placeholder shapes directly.
-        for shape in source_slide.shapes:
-            if getattr(shape, "is_placeholder", False):
-                continue
-            new_el = copy.deepcopy(shape.element)
-            duplicate.shapes._spTree.insert_element_before(new_el, "p:extLst")
-
-        # Copy placeholder text where names match.
-        for src_placeholder in source_slide.placeholders:
-            try:
-                dst_placeholder = self._find_placeholder(duplicate, src_placeholder.name)
-            except BridgeError:
-                continue
-            if (
-                hasattr(src_placeholder, "has_text_frame")
-                and src_placeholder.has_text_frame
-                and dst_placeholder.has_text_frame
-            ):
-                dst_placeholder.text = src_placeholder.text
+        # Copy all shapes, background and slide-level data, carrying image/chart/link relationships along.
+        copy_warnings = copy_slide_content(source_slide, duplicate)
 
         if source_slide.has_notes_slide and source_slide.notes_slide.notes_text_frame:
             duplicate.notes_slide.notes_text_frame.text = source_slide.notes_slide.notes_text_frame.text
@@ -349,14 +339,14 @@ class OOXMLEngine(BaseEngine):
                 self._reorder_slide_ids(prs, order)
                 duplicate_index = position
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
             "presentation_id": session.id,
             "source_index": source_index,
             "duplicated_slide_index": duplicate_index,
-            "warning": "OOXML duplicate copies placeholders and non-placeholder shapes; complex animations may require COM mode.",
+            "warnings": copy_warnings,
             "presentation_state": self.get_presentation_state({"presentation_id": session.id}),
         }
 
@@ -373,7 +363,7 @@ class OOXMLEngine(BaseEngine):
         prs.part.drop_rel(rel_id)
         sld_id_lst.remove(slide_id)
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -391,7 +381,7 @@ class OOXMLEngine(BaseEngine):
         self._validate_order(prs, new_order)
         self._reorder_slide_ids(prs, new_order)
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -414,7 +404,7 @@ class OOXMLEngine(BaseEngine):
         order.insert(to_index - 1, moved)
         self._reorder_slide_ids(prs, order)
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -464,7 +454,7 @@ class OOXMLEngine(BaseEngine):
             except Exception:
                 warnings.append("Gradient background is partially supported in OOXML mode.")
 
-        self._persist(session)
+        self._mark_modified(session)
 
         payload: dict[str, Any] = {
             "success": True,
@@ -478,9 +468,10 @@ class OOXMLEngine(BaseEngine):
 
     def get_slide_snapshot(self, params: dict[str, Any]) -> dict[str, Any]:
         session = self._get_session(str(params["presentation_id"]))
-        slide_index = int(params["slide_index"])
+        slide_indices, single = snapshot_slide_indices(params)
         width_px = int(params.get("width_px") or 1280)
-        self._assert_slide_index(self._prs(session), slide_index)
+        for slide_index in slide_indices:
+            self._assert_slide_index(self._prs(session), slide_index)
 
         soffice = shutil.which("soffice")
         pdftoppm = shutil.which("pdftoppm")
@@ -502,44 +493,77 @@ class OOXMLEngine(BaseEngine):
                 },
             )
 
-        self._persist(session)
+        timeout_sec = self._render_timeout_sec()
+        deadline = time.monotonic() + timeout_sec
+        pdf_path = self._rendered_pdf(session, soffice, deadline, timeout_sec)
+        images = [
+            self._render_slide_image(pdf_path, pdftoppm, slide_index, width_px, deadline, timeout_sec)
+            for slide_index in slide_indices
+        ]
 
-        with tempfile.TemporaryDirectory(prefix="pptx-snapshot-") as tmp_dir:
-            source_path = Path(session.working_path)
-            pdf_out_dir = Path(tmp_dir)
+        if single:
+            return {
+                "presentation_id": session.id,
+                "slide_index": slide_indices[0],
+                "mime_type": "image/jpeg",
+                "snapshot_base64": images[0],
+                "width_px": width_px,
+            }
 
-            convert_result = subprocess.run(
+        return {
+            "presentation_id": session.id,
+            "mime_type": "image/jpeg",
+            "width_px": width_px,
+            "snapshots": [
+                {"slide_index": slide_index, "snapshot_base64": image}
+                for slide_index, image in zip(slide_indices, images, strict=True)
+            ],
+        }
+
+    @staticmethod
+    def _render_timeout_sec() -> float:
+        try:
+            value = float(os.environ.get("PPTX_RENDER_TIMEOUT_SEC", ""))
+        except ValueError:
+            return _DEFAULT_RENDER_TIMEOUT_SEC
+        return value if value > 0 else _DEFAULT_RENDER_TIMEOUT_SEC
+
+    def _rendered_pdf(self, session: EngineSession, soffice: str, deadline: float, timeout_sec: float) -> Path:
+        """PDF rendering of the whole deck, converted at most once per revision of the session."""
+        cached = session.extra.get("render_cache")
+        if cached and cached["revision"] == session.revision and Path(cached["pdf_path"]).exists():
+            return Path(cached["pdf_path"])
+
+        # Rendering is a read: flushing writes the working copy without marking the session dirty.
+        self.flush_session(session)
+
+        source_path = Path(session.working_path)
+        render_dir = source_path.parent / "render"
+        shutil.rmtree(render_dir, ignore_errors=True)
+        render_dir.mkdir(parents=True)
+        session.extra.pop("render_cache", None)
+
+        self._run_renderer(
+            [soffice, "--headless", "--convert-to", "pdf", "--outdir", str(render_dir), str(source_path)],
+            "LibreOffice PDF export",
+            deadline,
+            timeout_sec,
+        )
+
+        pdf_path = render_dir / f"{source_path.stem}.pdf"
+        ensure(pdf_path.exists(), "engine_error", "Expected PDF output was not generated.")
+        session.extra["render_cache"] = {"revision": session.revision, "pdf_path": str(pdf_path)}
+        return pdf_path
+
+    def _render_slide_image(
+        self, pdf_path: Path, pdftoppm: str, slide_index: int, width_px: int, deadline: float, timeout_sec: float
+    ) -> str:
+        image_prefix = pdf_path.parent / f"slide-{slide_index}-{uuid.uuid4().hex}"
+        image_path = Path(f"{image_prefix}.jpg")
+        try:
+            self._run_renderer(
                 [
-                    str(soffice),
-                    "--headless",
-                    "--convert-to",
-                    "pdf",
-                    "--outdir",
-                    str(pdf_out_dir),
-                    str(source_path),
-                ],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-
-            if convert_result.returncode != 0:
-                raise BridgeError(
-                    code="engine_error",
-                    message="LibreOffice PDF export failed.",
-                    details={
-                        "stdout": convert_result.stdout,
-                        "stderr": convert_result.stderr,
-                    },
-                )
-
-            pdf_path = pdf_out_dir / f"{source_path.stem}.pdf"
-            ensure(pdf_path.exists(), "engine_error", "Expected PDF output was not generated.")
-
-            image_prefix = pdf_out_dir / "slide"
-            render_result = subprocess.run(
-                [
-                    str(pdftoppm),
+                    pdftoppm,
                     "-f",
                     str(slide_index),
                     "-l",
@@ -551,31 +575,46 @@ class OOXMLEngine(BaseEngine):
                     str(pdf_path),
                     str(image_prefix),
                 ],
+                "pdftoppm rendering",
+                deadline,
+                timeout_sec,
+            )
+            ensure(image_path.exists(), "engine_error", "Slide snapshot image was not generated.")
+            return base64.b64encode(image_path.read_bytes()).decode("ascii")
+        finally:
+            image_path.unlink(missing_ok=True)
+
+    @staticmethod
+    def _run_renderer(command: list[str], label: str, deadline: float, timeout_sec: float) -> None:
+        """Run an external renderer within what is left of the snapshot's time budget."""
+        timeout_error = BridgeError(
+            code="timeout",
+            message=f"Slide rendering did not finish within {timeout_sec:g} s (stopped during: {label}).",
+            details={"timeout_sec": timeout_sec, "hint": "Raise PPTX_RENDER_TIMEOUT_SEC for very large decks."},
+        )
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise timeout_error
+
+        try:
+            result = subprocess.run(
+                command,
                 capture_output=True,
                 text=True,
                 check=False,
+                # Never let a child read the bridge's stdin: it carries the protocol stream.
+                stdin=subprocess.DEVNULL,
+                timeout=remaining,
             )
-            if render_result.returncode != 0:
-                raise BridgeError(
-                    code="engine_error",
-                    message="pdftoppm rendering failed.",
-                    details={
-                        "stdout": render_result.stdout,
-                        "stderr": render_result.stderr,
-                    },
-                )
+        except subprocess.TimeoutExpired:
+            raise timeout_error from None
 
-            image_path = Path(f"{image_prefix}.jpg")
-            ensure(image_path.exists(), "engine_error", "Slide snapshot image was not generated.")
-            encoded = base64.b64encode(image_path.read_bytes()).decode("ascii")
-
-        return {
-            "presentation_id": session.id,
-            "slide_index": slide_index,
-            "mime_type": "image/jpeg",
-            "snapshot_base64": encoded,
-            "width_px": width_px,
-        }
+        if result.returncode != 0:
+            raise BridgeError(
+                code="engine_error",
+                message=f"{label} failed.",
+                details={"stdout": result.stdout, "stderr": result.stderr},
+            )
 
     def get_placeholders(self, params: dict[str, Any]) -> dict[str, Any]:
         session = self._get_session(str(params["presentation_id"]))
@@ -620,7 +659,7 @@ class OOXMLEngine(BaseEngine):
             if params.get("color_hex"):
                 run.font.color.rgb = RGBColor.from_string(normalize_color(str(params["color_hex"])))
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -649,7 +688,7 @@ class OOXMLEngine(BaseEngine):
                 str(image_path), placeholder.left, placeholder.top, placeholder.width, placeholder.height
             )
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -673,7 +712,7 @@ class OOXMLEngine(BaseEngine):
         else:
             warning = "Non-text placeholder reset is limited in OOXML mode."
 
-        self._persist(session)
+        self._mark_modified(session)
 
         payload: dict[str, Any] = {
             "success": True,
@@ -751,7 +790,7 @@ class OOXMLEngine(BaseEngine):
 
         self._write_paragraphs(placeholder.text_frame, paragraphs_data)
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -794,7 +833,7 @@ class OOXMLEngine(BaseEngine):
                 run = paragraph.runs[0]
                 self._apply_run_formatting(run, params)
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -870,7 +909,7 @@ class OOXMLEngine(BaseEngine):
                         break
                     table.cell(r_idx, c_idx).text = str(cell_text)
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -927,7 +966,7 @@ class OOXMLEngine(BaseEngine):
         cell = table.cell(row, col)
         self._write_cell(cell, params)
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -962,7 +1001,7 @@ class OOXMLEngine(BaseEngine):
                 elif isinstance(cell_data, dict):
                     self._write_cell(cell, cell_data)
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -1039,7 +1078,7 @@ class OOXMLEngine(BaseEngine):
         if text and hasattr(shape, "text_frame"):
             shape.text_frame.paragraphs[0].text = str(text)
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -1061,7 +1100,7 @@ class OOXMLEngine(BaseEngine):
         sp_tree = slide.shapes._spTree
         sp_tree.remove(shape.element)
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -1080,7 +1119,7 @@ class OOXMLEngine(BaseEngine):
         notes_slide = slide.notes_slide
         notes_slide.notes_text_frame.text = notes_text
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -1111,7 +1150,7 @@ class OOXMLEngine(BaseEngine):
             text_content = str(params.get("text_content", ""))
             text_frame.paragraphs[0].text = text_content
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -1182,7 +1221,7 @@ class OOXMLEngine(BaseEngine):
         if "name" in params:
             shape.name = str(params["name"])
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -1208,8 +1247,11 @@ class OOXMLEngine(BaseEngine):
         target_slide_index = int(params.get("target_slide_index", slide_index))
         target_slide = self._get_slide_obj(session, target_slide_index)
 
-        # Deep copy the shape XML element
+        # Deep copy the shape XML element, then re-home its image/chart/link relationships
+        # onto the target slide and give it an id that is unique there.
         new_element = copy.deepcopy(shape.element)
+        copy_warnings = transfer_relationships(new_element, slide.part, target_slide.part)
+        assign_fresh_shape_ids(new_element, target_slide.shapes._spTree)
 
         # Optional offset
         offset_left = params.get("offset_left")
@@ -1225,7 +1267,7 @@ class OOXMLEngine(BaseEngine):
         if new_shape and offset_top is not None:
             new_shape.top = Emu(int(new_shape.top or 0) + to_emu(offset_top))
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -1233,6 +1275,8 @@ class OOXMLEngine(BaseEngine):
             "source_slide_index": slide_index,
             "target_slide_index": target_slide_index,
             "cloned_shape_name": new_shape.name if new_shape else "unknown",
+            "cloned_shape_id": int(new_shape.shape_id) if new_shape else None,
+            "warnings": copy_warnings,
             "presentation_state": self.get_presentation_state({"presentation_id": session.id}),
         }
 
@@ -1301,7 +1345,7 @@ class OOXMLEngine(BaseEngine):
             sp_tree.remove(shape.element)
             grp_sp.append(shape.element)
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -1356,7 +1400,7 @@ class OOXMLEngine(BaseEngine):
         # Remove the now-empty group
         sp_tree.remove(group_element)
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -1398,7 +1442,7 @@ class OOXMLEngine(BaseEngine):
             sp_tree.remove(element)
             sp_tree.insert(max(idx - 1, 2), element)
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -1436,7 +1480,7 @@ class OOXMLEngine(BaseEngine):
 
         pic = slide.shapes.add_picture(**kwargs)
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -1519,7 +1563,7 @@ class OOXMLEngine(BaseEngine):
         if dash_style:
             etree.SubElement(ln, qn("a:prstDash"), attrib={"val": str(dash_style)})
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -1551,7 +1595,7 @@ class OOXMLEngine(BaseEngine):
         for slide in slides:
             total_replacements += self._replace_in_shapes(slide.shapes, find_text, replace_text, case_sensitive)
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -1681,7 +1725,7 @@ class OOXMLEngine(BaseEngine):
             chart.has_title = True
             chart.chart_title.text_frame.text = str(params["title"])
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -1717,7 +1761,7 @@ class OOXMLEngine(BaseEngine):
             for cat in plot.categories:
                 categories.append(str(cat) if cat is not None else "")
         except Exception as exc:
-            print(f"[pptx] Warning: could not extract chart categories: {exc}", file=sys.stderr)
+            logger.warning("could not extract chart categories: %s", exc)
 
         # Extract series
         series_list: list[dict[str, Any]] = []
@@ -1729,10 +1773,10 @@ class OOXMLEngine(BaseEngine):
                     s_data["values"] = [float(v) if v is not None else None for v in series.values]
                 except Exception as exc:
                     s_data["values"] = []
-                    print(f"[pptx] Warning: could not extract series values: {exc}", file=sys.stderr)
+                    logger.warning("could not extract series values: %s", exc)
                 series_list.append(s_data)
         except Exception as exc:
-            print(f"[pptx] Warning: could not extract chart series: {exc}", file=sys.stderr)
+            logger.warning("could not extract chart series: %s", exc)
 
         # Chart properties
         result: dict[str, Any] = {
@@ -1808,7 +1852,7 @@ class OOXMLEngine(BaseEngine):
                 new_data.add_series(str(s.get("name", "Series")), s.get("values", []))
 
         chart.replace_data(new_data)
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -1880,7 +1924,7 @@ class OOXMLEngine(BaseEngine):
                 chart.has_title = True
                 chart.chart_title.text_frame.text = str(title_text)
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -1909,27 +1953,10 @@ class OOXMLEngine(BaseEngine):
         # Deep copy the shape XML element
         new_element = copy.deepcopy(source_shape.element)
 
-        # Handle image relationships: copy image parts from source to target
-        source_slide_part = source_slide.part
-        target_slide_part = target_slide.part
-
-        # Find all relationship references (r:blipFill, r:embed, etc.)
-        nsmap = {
-            "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
-            "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
-        }
-        # Transfer blip (image) relationships
-        for blip in new_element.findall(".//a:blip", nsmap):
-            r_embed = blip.get("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed")
-            if r_embed:
-                try:
-                    source_rel = source_slide_part.rels[r_embed]
-                    image_part = source_rel.target_part
-                    # Add the image part to the target slide and get new rId
-                    new_rel = target_slide_part.relate_to(image_part, source_rel.reltype)
-                    blip.set("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed", new_rel)
-                except Exception as exc:
-                    print(f"[pptx] Warning: could not transfer image relationship {r_embed}: {exc}", file=sys.stderr)
+        # Copy every part the shape depends on (images, charts, media, links) into the target
+        # deck and repoint the shape at them; give the shape an id unique on the target slide.
+        copy_warnings = transfer_relationships(new_element, source_slide.part, target_slide.part)
+        assign_fresh_shape_ids(new_element, target_slide.shapes._spTree)
 
         # Apply offset if specified
         offset_left = params.get("offset_left")
@@ -1947,7 +1974,7 @@ class OOXMLEngine(BaseEngine):
                     current_x = int(off_elem.get("x", "0"))
                     off_elem.set("x", str(current_x + to_emu(offset_left)))
             except Exception as exc:
-                print(f"[pptx] Warning: could not apply offset_left: {exc}", file=sys.stderr)
+                logger.warning("could not apply offset_left: %s", exc)
 
         if offset_top is not None:
             try:
@@ -1957,13 +1984,13 @@ class OOXMLEngine(BaseEngine):
                         off.set("y", str(current_y + to_emu(offset_top)))
                         break
             except Exception as exc:
-                print(f"[pptx] Warning: could not apply offset_top: {exc}", file=sys.stderr)
+                logger.warning("could not apply offset_top: %s", exc)
 
         # Insert into target slide's shape tree
         target_sp_tree = target_slide.shapes._spTree
         target_sp_tree.append(new_element)
 
-        self._persist(target_session)
+        self._mark_modified(target_session)
 
         # Get the new shape's name from the inserted element
         new_shape_name = ""
@@ -1990,6 +2017,7 @@ class OOXMLEngine(BaseEngine):
             "target_slide_index": target_slide_index,
             "source_shape_name": source_shape.name,
             "new_shape_name": new_shape_name,
+            "warnings": copy_warnings,
             "presentation_state": self.get_presentation_state({"presentation_id": target_session.id}),
         }
 
@@ -2065,7 +2093,7 @@ class OOXMLEngine(BaseEngine):
         end_cell = table.cell(end_row, end_col)
         start_cell.merge(end_cell)
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -2108,7 +2136,7 @@ class OOXMLEngine(BaseEngine):
             val = params["space_after"]
             paragraph.space_after = Pt(float(val)) if val is not None else None
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -2169,7 +2197,7 @@ class OOXMLEngine(BaseEngine):
                 }
                 tf.vertical_anchor = val_map.get(str(val).lower())
 
-        self._persist(session)
+        self._mark_modified(session)
         return {
             "success": True,
             "shape_name": shape.name,
@@ -2213,7 +2241,7 @@ class OOXMLEngine(BaseEngine):
                     )
                 tbl_style_id.text = style_id
 
-        self._persist(session)
+        self._mark_modified(session)
 
         return {
             "success": True,
@@ -2267,7 +2295,7 @@ class OOXMLEngine(BaseEngine):
                     )
                     srgb_clr.set("val", hex_color)
 
-        self._persist(session)
+        self._mark_modified(session)
         return {
             "success": True,
             "shape_name": shape.name,
@@ -2309,7 +2337,7 @@ class OOXMLEngine(BaseEngine):
         if "width_pt" in params:
             connector.line.width = Pt(float(params["width_pt"]))
 
-        self._persist(session)
+        self._mark_modified(session)
         return {
             "success": True,
             "shape_name": connector.name,
@@ -2317,13 +2345,32 @@ class OOXMLEngine(BaseEngine):
             "presentation_state": self.get_presentation_state({"presentation_id": session.id}),
         }
 
+    supports_rollback = True
+
     def shutdown(self) -> None:
-        for session in list(self.sessions.values()):
-            try:
-                Path(session.working_path).unlink(missing_ok=True)
-            except Exception:
-                pass
         self.sessions.clear()
+        self.workspace.cleanup()
+
+    def flush_session(self, session: EngineSession) -> None:
+        if session.flushed_revision != session.revision:
+            self._prs(session).save(session.working_path)
+            session.flushed_revision = session.revision
+
+    def reload_session(self, session: EngineSession) -> None:
+        session.extra["prs"] = Presentation(session.working_path)
+        session.revision += 1
+        session.flushed_revision = session.revision
+
+    def _new_session_files(self) -> tuple[str, str]:
+        """Create a private directory for one session. Returns (directory, working file path)."""
+        session_dir = self.workspace.new_dir("session-")
+        return str(session_dir), str(session_dir / "presentation.pptx")
+
+    def _remove_session_files(self, session: EngineSession) -> None:
+        # Holds the working copy plus anything derived from it (rollback snapshot, rendered PDF).
+        session_dir = session.extra.get("session_dir")
+        if session_dir:
+            shutil.rmtree(session_dir, ignore_errors=True)
 
     def _get_session(self, presentation_id: str) -> EngineSession:
         session = self.sessions.get(presentation_id)
@@ -2332,6 +2379,7 @@ class OOXMLEngine(BaseEngine):
                 code="not_found",
                 message="Presentation session not found.",
                 details={"presentation_id": presentation_id},
+                hint=SESSION_NOT_FOUND_HINT,
             )
         return session
 
@@ -2341,9 +2389,13 @@ class OOXMLEngine(BaseEngine):
             raise BridgeError(code="engine_error", message="Session presentation object is missing.")
         return prs
 
-    def _persist(self, session: EngineSession) -> None:
-        prs = self._prs(session)
-        prs.save(session.working_path)
+    def _mark_modified(self, session: EngineSession) -> None:
+        """Record an in-memory edit.
+
+        The working file is not rewritten here: serialising the whole deck after every mutation
+        dominates the cost of small edits on large files. Readers of the file call flush_session.
+        """
+        session.revision += 1
         session.dirty = True
 
     def _assert_slide_index(self, prs: Presentation, slide_index: int) -> None:
@@ -2377,7 +2429,7 @@ class OOXMLEngine(BaseEngine):
 
         available = [layout.name for layout in prs.slide_layouts]
         raise BridgeError(
-            code="validation_error",
+            code="not_found",
             message=f"Layout '{layout_name}' not found.",
             details={"layout_name": layout_name, "available_layouts": available},
         )
@@ -2781,7 +2833,7 @@ class OOXMLEngine(BaseEngine):
                     cell.fill.solid()
                     cell.fill.fore_color.rgb = RGBColor.from_string(normalize_color(str(fill_hex)))
                 except Exception as exc:
-                    print(f"[pptx] Warning: could not set cell fill: {exc}", file=sys.stderr)
+                    logger.warning("could not set cell fill: %s", exc)
 
     def _replace_in_shapes(self, shapes, find_text: str, replace_text: str, case_sensitive: bool) -> int:
         replacements = 0

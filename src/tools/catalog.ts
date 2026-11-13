@@ -260,14 +260,23 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "pptx_get_slide_snapshot",
     description:
-      "Return Base64 JPEG preview for visual verification. In OOXML mode this requires LibreOffice and pdftoppm.",
+      "Return JPEG previews for visual verification. Pass slide_index for one slide, or slide_indices to get several slides in one call. In OOXML mode this requires LibreOffice and pdftoppm.",
     schema: z
       .object({
         presentation_id: presentationIdSchema,
-        slide_index: slideIndexSchema,
+        slide_index: slideIndexSchema.optional(),
+        slide_indices: z
+          .array(slideIndexSchema)
+          .min(1)
+          .max(20)
+          .optional()
+          .describe("Several 1-based slide indices to render in one call, instead of slide_index."),
         width_px: z.number().int().min(128).max(4096).optional(),
       })
-      .strict(),
+      .strict()
+      .refine((value) => (value.slide_index === undefined) !== (value.slide_indices === undefined), {
+        message: "Provide exactly one of slide_index or slide_indices.",
+      }),
     mutating: false,
   },
   {
@@ -1309,6 +1318,37 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       })
       .strict(),
     mutating: false,
+  },
+  {
+    name: "pptx_batch",
+    description:
+      "Run several operations on one presentation in a single call, in order. Use it to build or edit slides " +
+      "without one round trip per change. Each operation names a pptx_* tool and gives its arguments without " +
+      "presentation_id. All operations are validated before any runs. With atomic=true (default) a failing " +
+      "operation restores the presentation to its state before the batch (OOXML engine; the COM engine keeps " +
+      "the operations already applied and says so). Not allowed inside a batch: pptx_save_presentation, " +
+      "pptx_close_presentation, pptx_batch, pptx_agent_* and tools that do not take presentation_id.",
+    schema: z
+      .object({
+        presentation_id: presentationIdSchema,
+        operations: z
+          .array(
+            z
+              .object({
+                tool: z.string().min(1).describe("Name of the tool to run, e.g. pptx_add_slide."),
+                arguments: z
+                  .record(z.string(), z.unknown())
+                  .optional()
+                  .describe("Arguments for that tool, without presentation_id."),
+              })
+              .strict(),
+          )
+          .min(1)
+          .max(50),
+        atomic: z.boolean().optional().describe("Undo the whole batch if an operation fails. Default true."),
+      })
+      .strict(),
+    mutating: true,
   },
 ];
 

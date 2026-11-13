@@ -6,6 +6,34 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from errors import ensure
+
+MAX_SNAPSHOT_SLIDES = 20
+
+
+def snapshot_slide_indices(params: dict[str, Any]) -> tuple[list[int], bool]:
+    """Slides requested from pptx_get_slide_snapshot.
+
+    Returns the 1-based indices and whether the caller used the single-slide form
+    (``slide_index``), which keeps the original flat response shape.
+    """
+    single = params.get("slide_index")
+    many = params.get("slide_indices")
+    ensure(
+        (single is None) != (many is None),
+        "validation_error",
+        "Provide exactly one of slide_index or slide_indices.",
+    )
+    if single is not None:
+        return [int(single)], True
+
+    ensure(
+        isinstance(many, list) and 1 <= len(many) <= MAX_SNAPSHOT_SLIDES,
+        "validation_error",
+        f"slide_indices must list between 1 and {MAX_SNAPSHOT_SLIDES} slides.",
+    )
+    return [int(index) for index in many], False
+
 
 @dataclass
 class EngineSession:
@@ -14,6 +42,9 @@ class EngineSession:
     working_path: str
     engine: str
     dirty: bool = False
+    # Bumped on every in-memory edit; flushed_revision is the one last written to working_path.
+    revision: int = 0
+    flushed_revision: int = 0
     opened_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -28,6 +59,10 @@ class EngineSession:
 
 class BaseEngine(ABC):
     name: str
+    sessions: dict[str, EngineSession]
+    # True when flush_session/reload_session really round-trip the working file, which is what
+    # restoring a session to an earlier state relies on.
+    supports_rollback = False
 
     @abstractmethod
     def get_engine_info(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -266,3 +301,16 @@ class BaseEngine(ABC):
     @abstractmethod
     def shutdown(self) -> None:
         raise NotImplementedError
+
+    # --- Working-file synchronisation (used by rollback snapshots) ---
+
+    def flush_session(self, session: EngineSession) -> None:
+        """Make ``session.working_path`` reflect every edit made so far.
+
+        No-op for engines that keep the working file current themselves.
+        """
+        return None
+
+    def reload_session(self, session: EngineSession) -> None:
+        """Pick up a working file that was replaced on disk, discarding in-memory state."""
+        return None

@@ -11,8 +11,8 @@ from pathlib import Path
 from typing import Any
 
 from com_worker import COMWorker
-from engines.base import BaseEngine, EngineSession
-from errors import BridgeError, ensure
+from engines.base import BaseEngine, EngineSession, snapshot_slide_indices
+from errors import SESSION_NOT_FOUND_HINT, BridgeError, ensure
 from utils.colors import normalize_color
 from utils.paths import validate_existing_file, validate_output_file
 from utils.units import to_emu
@@ -167,6 +167,9 @@ class COMEngine(BaseEngine):
             Path(tmp_path).unlink(missing_ok=True)
             shutil.copy2(source, tmp_path)
             self.worker.call(self._open_presentation_for_session, session_id, tmp_path)
+            if width is not None or height is not None:
+                # An explicit size overrides the template's page setup.
+                self.worker.call(self._apply_page_size, session_id, width, height)
             original_path = str(source)
         else:
             fd, tmp_path = tempfile.mkstemp(suffix=".pptx", prefix="pptx-session-")
@@ -200,6 +203,16 @@ class COMEngine(BaseEngine):
 
         prs.SaveAs(tmp_path, 24)
         self._presentations[session_id] = prs
+
+    def _apply_page_size(self, session_id: str, width, height) -> None:
+        prs = self._presentations[session_id]
+
+        if width is not None:
+            prs.PageSetup.SlideWidth = to_emu(width) / 12700
+        if height is not None:
+            prs.PageSetup.SlideHeight = to_emu(height) / 12700
+
+        prs.Save()
 
     def _open_presentation_for_session(self, session_id: str, path: str) -> None:
         prs = self._app.Presentations.Open(path, WithWindow=False)
@@ -642,17 +655,31 @@ class COMEngine(BaseEngine):
 
     def get_slide_snapshot(self, params: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover - Windows only
         presentation_id = str(params["presentation_id"])
-        slide_index = int(params["slide_index"])
+        slide_indices, single = snapshot_slide_indices(params)
         width_px = int(params.get("width_px") or 1280)
 
-        snapshot = self.worker.call(self._export_slide_snapshot_threadsafe, presentation_id, slide_index, width_px)
+        snapshots = [
+            self.worker.call(self._export_slide_snapshot_threadsafe, presentation_id, slide_index, width_px)
+            for slide_index in slide_indices
+        ]
+
+        if single:
+            return {
+                "presentation_id": presentation_id,
+                "slide_index": slide_indices[0],
+                "mime_type": "image/jpeg",
+                "snapshot_base64": snapshots[0],
+                "width_px": width_px,
+            }
 
         return {
             "presentation_id": presentation_id,
-            "slide_index": slide_index,
             "mime_type": "image/jpeg",
-            "snapshot_base64": snapshot,
             "width_px": width_px,
+            "snapshots": [
+                {"slide_index": slide_index, "snapshot_base64": snapshot}
+                for slide_index, snapshot in zip(slide_indices, snapshots, strict=True)
+            ],
         }
 
     def _export_slide_snapshot_threadsafe(self, session_id: str, slide_index: int, width_px: int) -> str:
@@ -2153,7 +2180,12 @@ class COMEngine(BaseEngine):
     def _get_session(self, presentation_id: str) -> EngineSession:
         session = self.sessions.get(presentation_id)
         if session is None:
-            raise BridgeError("not_found", "Presentation session not found.", {"presentation_id": presentation_id})
+            raise BridgeError(
+                "not_found",
+                "Presentation session not found.",
+                {"presentation_id": presentation_id},
+                SESSION_NOT_FOUND_HINT,
+            )
         return session
 
     def _require_presentation(self, session_id: str):
@@ -2187,7 +2219,7 @@ class COMEngine(BaseEngine):
                 available.append(master.CustomLayouts(i).Name)
 
         raise BridgeError(
-            "validation_error",
+            "not_found",
             f"Layout '{layout_name}' not found.",
             {"layout_name": layout_name, "available_layouts": available},
         )

@@ -201,7 +201,8 @@ TOOL_CATALOG: list[dict[str, Any]] = [
         "mutating": False,
         "params": [
             _pid(),
-            _si(),
+            _p("slide_index", "number", False, "1-based slide index (or use slide_indices)"),
+            _p("slide_indices", "array", False, "Several 1-based slide indices in one call (max 20)"),
             _p("width_px", "number", False, "Width in pixels (128-4096)"),
         ],
     },
@@ -917,6 +918,27 @@ TOOL_CATALOG: list[dict[str, Any]] = [
         ],
     },
 ]
+
+TOOL_CATALOG.append(
+    {
+        "name": "pptx_batch",
+        "description": "Run several operations on one presentation in a single call, with rollback on failure.",
+        "category": "Session",
+        "mutating": True,
+        "params": [
+            _pid(),
+            _p("operations", "array", True, 'Operations to run in order: [{"tool": "...", "arguments": {...}}]'),
+            _p("atomic", "boolean", False, "Restore the presentation if an operation fails (default true)"),
+        ],
+    }
+)
+
+# Mutating tools return a slide_count by default; this flag asks for the full slide listing.
+for _tool in TOOL_CATALOG:
+    if _tool["mutating"] and not _tool["name"].startswith("pptx_agent_"):
+        _tool["params"].append(
+            _p("include_state", "boolean", False, "Return the full presentation_state (default false)")
+        )
 
 
 def get_catalog_by_category() -> dict[str, list[dict[str, Any]]]:

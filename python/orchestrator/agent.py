@@ -29,7 +29,7 @@ class AgentOrchestrator:
         self.clarifier = LLMClarifier(llm)
         self.planner = LLMPlanner(llm, max_steps=config.max_steps)
         self.executor = PlanExecutor(engine, method_map)
-        self.snapshot_mgr = SnapshotManager()
+        self.snapshot_mgr = SnapshotManager(engine)
 
     def dispatch(self, method: str, params: dict[str, Any]) -> Any:
         handlers = {

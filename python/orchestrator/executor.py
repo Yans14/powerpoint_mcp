@@ -6,6 +6,7 @@ from typing import Any
 from engines.base import BaseEngine
 from errors import BridgeError
 from orchestrator.models import AgentTask, PlanStep, StepStatus
+from validation import validate_params
 
 
 class PlanExecutor:
@@ -66,6 +67,8 @@ class PlanExecutor:
                 code="engine_error",
                 message=f"Engine method '{method_name}' not implemented.",
             )
+        # Plan steps come from an LLM and bypass the MCP layer's schema validation.
+        validate_params(tool_name, params)
         return target(params)
 
     def _update_context(
